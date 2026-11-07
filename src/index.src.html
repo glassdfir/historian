@@ -1,0 +1,1134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Schema · Browser History &amp; SQLite Parser</title>
+<meta name="description" content="Parse browser history and any SQLite database in your browser: Chrome, Edge, Firefox and Safari artifacts, decoded timestamps, WAL merge and a SQL console.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23141a24'/%3E%3Cg fill='none' stroke='%23f2a93b' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cellipse cx='16' cy='9.5' rx='8' ry='3'/%3E%3Cpath d='M8 9.5v13c0 1.66 3.58 3 8 3s8-1.34 8-3v-13'/%3E%3Cpath d='M8 16c0 1.66 3.58 3 8 3s8-1.34 8-3'/%3E%3C/g%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#0d1015;--panel:#141920;--panel2:#1a2029;--line:#252d38;--line2:#313b48;
+  --text:#d8dee6;--muted:#8391a2;--dim:#5d6a7a;
+  --accent:#e9a23b;--accent-ink:#1b1206;--teal:#4cb5aa;--blue:#6ea8fe;--bad:#ef6b62;--good:#5cc98a;
+  --sel:#22303f;--hover:#18202a;
+  --mono:ui-monospace,SFMono-Regular,"JetBrains Mono",Menlo,Consolas,monospace;
+  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:13px/1.45 var(--sans)}
+button,input,textarea,select{font:inherit;color:inherit}
+#app{display:grid;grid-template-columns:272px 1fr;grid-template-rows:54px 1fr;height:100vh;min-height:0}
+header{grid-column:1/3;display:flex;align-items:center;gap:14px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+.logo{display:flex;align-items:center;gap:10px}
+.logo b{font-size:17px;letter-spacing:.2px}
+.logo .sub{color:var(--muted);font-size:12px;margin-left:2px}
+.spacer{flex:1}
+.local{color:var(--muted);font-size:12px;display:flex;align-items:center;gap:6px}
+.local i{width:7px;height:7px;border-radius:50%;background:var(--good);display:inline-block;box-shadow:0 0 0 3px rgba(92,201,138,.15)}
+.seg{display:flex;border:1px solid var(--line2);border-radius:7px;overflow:hidden}
+.seg button{background:none;border:0;padding:5px 11px;cursor:pointer;color:var(--muted)}
+.seg button.on{background:var(--panel2);color:var(--text)}
+.btn{background:var(--panel2);border:1px solid var(--line2);border-radius:7px;padding:6px 12px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--dim)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.small{padding:4px 9px;font-size:12px}
+aside{border-right:1px solid var(--line);background:var(--panel);overflow:auto;min-height:0;padding:10px 0 30px}
+.grp{font-size:11px;text-transform:uppercase;letter-spacing:.9px;color:var(--dim);padding:12px 16px 6px}
+.src{margin-top:8px;border-top:1px solid var(--line);padding-top:6px}
+.srchead{display:flex;align-items:center;gap:8px;padding:6px 10px 6px 16px}
+.fname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.x{background:none;border:0;color:var(--dim);cursor:pointer;font-size:16px;line-height:1;padding:2px 6px;border-radius:5px}
+.x:hover{color:var(--bad);background:var(--panel2)}
+.badge{font-size:10.5px;font-weight:700;letter-spacing:.3px;padding:2px 6px;border-radius:4px;background:var(--panel2);color:var(--muted);border:1px solid var(--line2);white-space:nowrap}
+.b-chromium{color:#7fb4ff;border-color:#2c4566}
+.b-firefox{color:#ff9d5c;border-color:#5e3a22}
+.b-safari{color:#62d0e6;border-color:#22505a}
+.b-sqlite{color:#b9a3ff;border-color:#40355f}
+.it{display:flex;align-items:center;gap:8px;padding:5px 12px 5px 26px;cursor:pointer;color:var(--text);border-left:2px solid transparent}
+.it:hover{background:var(--hover)}
+.it.on{background:var(--sel);border-left-color:var(--accent)}
+.it .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.it .cnt{font:11.5px var(--mono);color:var(--muted)}
+.it.sub{padding-left:40px;color:var(--muted);font-size:12.5px}
+.it.tool .nm{color:var(--muted)}
+details>summary{list-style:none;cursor:pointer}
+details>summary::-webkit-details-marker{display:none}
+details>summary .car{display:inline-block;transition:transform .15s;color:var(--dim);width:10px}
+details[open]>summary .car{transform:rotate(90deg)}
+main{min-width:0;min-height:0;display:flex;flex-direction:column}
+.bar{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.ttl{display:flex;align-items:baseline;gap:8px;min-width:0;margin-right:auto}
+.ttl .crumb{color:var(--muted)}
+.ttl b{font-size:15px}
+.count{font:12px var(--mono);color:var(--muted)}
+.in{background:var(--bg);border:1px solid var(--line2);border-radius:7px;padding:6px 10px;outline:none}
+.in:focus{border-color:var(--accent)}
+#q{width:210px}
+.rng input{width:178px}
+.rng{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
+.rng input{padding:4px 7px;font-size:12px;color-scheme:dark}
+.body{flex:1;display:flex;min-height:0}
+#gridwrap{flex:1;overflow:auto;min-width:0;position:relative}
+table#grid{border-collapse:separate;border-spacing:0;table-layout:fixed}
+#grid th{position:sticky;top:0;z-index:2;background:var(--panel);text-align:left;font-weight:600;font-size:12px;color:var(--muted);padding:0 10px;height:32px;border-bottom:1px solid var(--line2);border-right:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;user-select:none}
+#grid th:hover{color:var(--text)}
+#grid th .ar{color:var(--accent);margin-left:4px}
+#grid th .rz{position:absolute;right:0;top:0;bottom:0;width:6px;cursor:col-resize}
+#grid th .rz:hover{background:var(--line2)}
+#grid td{height:26px;padding:0 10px;border-bottom:1px solid #1a2028;border-right:1px solid #171d24;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#grid tbody tr.r{cursor:default}
+#grid tbody tr.r:hover td{background:var(--hover)}
+#grid tbody tr.r.on td{background:var(--sel)}
+.ty-t{font-family:var(--mono);font-size:12px;color:#f0c27a}
+.ty-u{color:var(--blue)}
+.ty-n{font-family:var(--mono);font-size:12px;text-align:right}
+.ty-tr,.ty-fv{font-family:var(--mono);font-size:11.5px;color:var(--teal)}
+.ty-b{font-size:12px;color:var(--muted)}
+td.null{color:var(--dim)}
+#detail{width:400px;border-left:1px solid var(--line);background:var(--panel);overflow:auto;padding:14px 16px 40px;flex:none}
+#detail h3{margin:0 0 12px;font-size:13px;display:flex;align-items:center;gap:8px}
+#detail h3 span{flex:1}
+.kv{padding:8px 0;border-bottom:1px solid var(--line)}
+.kv .k{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim);margin-bottom:3px}
+.kv .v{word-break:break-all;white-space:pre-wrap}
+.kv .v.ty-n{text-align:left}
+.kv .muted{color:var(--muted);font-size:12px}
+pre.hex{font:11px/1.5 var(--mono);color:var(--muted);background:var(--bg);padding:8px;border-radius:6px;overflow:auto;white-space:pre;margin:4px 0 0}
+.console{border-bottom:1px solid var(--line);padding:10px 14px;display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}
+.console textarea{flex:1;min-width:300px;height:96px;resize:vertical;background:var(--bg);border:1px solid var(--line2);border-radius:7px;padding:8px 10px;font:12.5px/1.5 var(--mono);outline:none}
+.console textarea:focus{border-color:var(--accent)}
+.console .side{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.console .err{color:var(--bad);font:12px var(--mono);flex-basis:100%;white-space:pre-wrap}
+.console .hint{color:var(--dim);font-size:11.5px}
+.chk{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;cursor:pointer}
+.presets{display:flex;gap:6px;flex-wrap:wrap;flex-basis:100%}
+.empty{flex:1;display:flex;align-items:center;justify-content:center;padding:30px;overflow:auto}
+.drop{max-width:760px;width:100%;border:1.5px dashed var(--line2);border-radius:14px;padding:38px 40px;background:linear-gradient(180deg,rgba(233,162,59,.035),transparent)}
+.drop h1{margin:0 0 6px;font-size:24px}
+.drop p{color:var(--muted);margin:0 0 18px;max-width:600px}
+.drop .acts{display:flex;gap:10px;margin-bottom:26px}
+.sup{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.sup div{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:12px 14px}
+.sup b{display:block;margin-bottom:6px}
+.sup code{font:11.5px var(--mono);color:var(--muted);display:block;line-height:1.7}
+.tips{margin-top:18px;color:var(--muted);font-size:12px;line-height:1.7}
+.tips code{font-family:var(--mono);color:var(--text);background:var(--panel2);padding:1px 5px;border-radius:4px}
+#dropov{position:fixed;inset:0;background:rgba(13,16,21,.82);display:none;align-items:center;justify-content:center;z-index:50;pointer-events:none}
+#dropov div{border:2px dashed var(--accent);border-radius:16px;padding:40px 60px;font-size:18px;color:var(--accent)}
+body.dragging #dropov{display:flex}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--panel2);border:1px solid var(--line2);padding:9px 16px;border-radius:9px;opacity:0;transition:.2s;pointer-events:none;z-index:60;max-width:80vw}
+#toast.show{opacity:1;transform:translateX(-50%)}
+#toast.bad{border-color:var(--bad)}
+#loading{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(13,16,21,.6);z-index:55;font-size:14px;color:var(--muted)}
+#loading.show{display:flex}
+.nodata{padding:40px;color:var(--muted);text-align:center}
+@media (max-width:900px){#app{grid-template-columns:1fr}aside{display:none}.sup{grid-template-columns:1fr}#detail{position:fixed;right:0;top:54px;bottom:0;z-index:20;width:min(400px,92vw)}}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="logo">
+      <svg width='28' height='28' aria-hidden='true' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='none'/><g fill='none' stroke='#f2a93b' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><ellipse cx='16' cy='9.5' rx='8' ry='3'/><path d='M8 9.5v13c0 1.66 3.58 3 8 3s8-1.34 8-3v-13'/><path d='M8 16c0 1.66 3.58 3 8 3s8-1.34 8-3'/></g></svg>
+      <b>Schema</b><span class="sub">browser history &amp; SQLite parser</span>
+    </div>
+    <div class="spacer"></div>
+    <span class="local"><i></i>Runs locally — nothing is uploaded</span>
+    <div class="seg" id="tz"><button data-tz="utc" class="on">UTC</button><button data-tz="local">Local</button></div>
+    <label class="btn primary">Open files…<input type="file" id="fi" multiple hidden></label>
+  </header>
+  <aside id="side"></aside>
+  <main id="main"></main>
+</div>
+<div id="dropov"><div>Drop SQLite files (and any -wal files) to parse</div></div>
+<div id="loading">Parsing…</div>
+<div id="toast"></div>
+
+<script src="/assets/suite/handoff.js"></script>
+<script>/*__SQLJS_WASM__*/</script>
+<script>/*__SQLJS_ASM__*/</script>
+<script>
+"use strict";
+/* ============================================================
+   Schema — client-side SQLite parser for browser artifacts
+   SQLite engine: sql.js (MIT) — https://github.com/sql-js/sql.js
+   ============================================================ */
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ---------- engine boot: WASM first, pure-JS fallback ---------- */
+let SQL = null, ENGINE = '';
+const sqlReady = (async () => {
+  try {
+    SQL = await Promise.race([initSqlJs(), new Promise((_, rej) => setTimeout(() => rej(new Error('WASM init timeout')), 10000))]); ENGINE = 'WASM';
+  } catch (e) {
+    console.warn('WASM engine unavailable, falling back to asm.js', e);
+    SQL = await window.__initSqlJsAsm(); ENGINE = 'asm.js';
+  }
+  return SQL;
+})();
+
+/* ---------- state ---------- */
+const S = { files: [], combined: [], reports: new Map(), view: null, tz: 'utc', seq: 0 };
+
+/* ---------- time ---------- */
+const pad = (n, w = 2) => String(n).padStart(w, '0');
+function fmtT(ms, tz = S.tz) {
+  if (ms == null || ms === '') return '';
+  const d = new Date(ms);
+  if (isNaN(d.getTime())) return String(ms);
+  const u = tz === 'utc';
+  const Y = u ? d.getUTCFullYear() : d.getFullYear(), M = u ? d.getUTCMonth() : d.getMonth(), D = u ? d.getUTCDate() : d.getDate();
+  const h = u ? d.getUTCHours() : d.getHours(), m = u ? d.getUTCMinutes() : d.getMinutes(), s = u ? d.getUTCSeconds() : d.getSeconds();
+  const ml = u ? d.getUTCMilliseconds() : d.getMilliseconds();
+  return `${Y}-${pad(M + 1)}-${pad(D)} ${pad(h)}:${pad(m)}:${pad(s)}.${pad(ml, 3)}`;
+}
+// Timestamp formats seen in browser artifacts. Ranges cover roughly 1997–2060.
+const TSF = [
+  { name: 'WebKit µs',   min: 1.25e16, max: 1.45e16, to: v => v / 1000 - 11644473600000 },
+  { name: 'FILETIME',    min: 1.25e17, max: 1.45e17, to: v => v / 1e4 - 11644473600000 },
+  { name: 'Unix µs',     min: 8.5e14,  max: 2.9e15,  to: v => v / 1000 },
+  { name: 'Unix ms',     min: 8.5e11,  max: 2.9e12,  to: v => v },
+  { name: 'Unix s',      min: 8.5e8,   max: 2.9e9,   to: v => v * 1000 },
+  { name: 'Mac abs s',   min: 1.0e8,   max: 8.5e8,   to: v => (v + 978307200) * 1000 },
+];
+const guessFmt = v => (typeof v === 'number' && v) ? (TSF.find(f => v >= f.min && v <= f.max) || null) : null;
+
+/* SQL helpers that convert timestamps to Unix ms inside SQLite (exact integer maths) */
+const WK  = x => `CASE WHEN ${x} > 0 THEN (${x} / 1000 - 11644473600000) END`;        // Chromium: µs since 1601
+const PR  = x => `CASE WHEN ${x} > 0 THEN (${x} / 1000) END`;                         // Firefox PRTime: µs since 1970
+const MAC = x => `CASE WHEN ${x} IS NOT NULL AND ${x} <> 0 THEN CAST(ROUND((${x} + 978307200) * 1000) AS INTEGER) END`; // Safari/Cocoa: s since 2001
+const US  = x => `CASE WHEN ${x} > 0 THEN (${x} * 1000) END`;                         // Unix seconds
+const sel = parts => parts.filter(Boolean).join(',\n  ');
+
+/* ---------- decoders ---------- */
+const CHROME_CORE = ['LINK','TYPED','AUTO_BOOKMARK','AUTO_SUBFRAME','MANUAL_SUBFRAME','GENERATED','AUTO_TOPLEVEL','FORM_SUBMIT','RELOAD','KEYWORD','KEYWORD_GENERATED'];
+const CHROME_QUAL = [[0x00800000,'BLOCKED'],[0x01000000,'FORWARD_BACK'],[0x02000000,'FROM_ADDRESS_BAR'],[0x04000000,'HOME_PAGE'],[0x08000000,'FROM_API'],[0x10000000,'CHAIN_START'],[0x20000000,'CHAIN_END'],[0x40000000,'CLIENT_REDIRECT'],[0x80000000,'SERVER_REDIRECT']];
+function chromeTransition(v) {
+  if (v == null) return null;
+  v = Number(v) >>> 0;
+  const core = CHROME_CORE[v & 0xff] || ('CORE_' + (v & 0xff));
+  const q = CHROME_QUAL.filter(([b]) => (v & b) !== 0).map(x => x[1]);
+  return q.length ? `${core} · ${q.join(', ')}` : core;
+}
+const FF_VISIT = {1:'LINK',2:'TYPED',3:'BOOKMARK',4:'EMBED',5:'REDIRECT_PERMANENT',6:'REDIRECT_TEMPORARY',7:'DOWNLOAD',8:'FRAMED_LINK',9:'RELOAD'};
+const CH_DL_STATE = {0:'In progress',1:'Complete',2:'Cancelled',3:'Interrupted',4:'Interrupted'};
+const CH_DANGER = {0:'Not dangerous',1:'Dangerous file',2:'Dangerous URL',3:'Dangerous content',4:'Maybe dangerous',5:'Uncommon content',6:'User validated',7:'Dangerous host',8:'Potentially unwanted',9:'Allowlisted by policy',10:'Async scanning',11:'Blocked: password protected',12:'Blocked: too large',13:'Sensitive content warning',14:'Sensitive content block',15:'Deep scanned: safe',16:'Deep scanned: opened dangerous',17:'Prompt for scanning',18:'Blocked: unsupported type',19:'Dangerous account compromise'};
+
+function postValue(type, v) {
+  switch (type) {
+    case 'tr': return chromeTransition(v);
+    case 'fv': return v == null ? null : (FF_VISIT[v] || `TYPE_${v}`);
+    case 'ds': return v == null ? null : (CH_DL_STATE[v] ?? `State ${v}`);
+    case 'dg': return v == null ? null : (CH_DANGER[v] ?? `Danger ${v}`);
+    case 'b':  return v == null ? null : (v ? 'Yes' : 'No');
+    case 'a': { const f = guessFmt(v); return f ? f.to(v) : null; }
+    default:   return v;
+  }
+}
+const typeOut = t => (t === 'a' ? 't' : (t === 'ds' || t === 'dg') ? '' : t);
+
+/* ---------- artifact definitions ---------- */
+// Column aliases carry a display type after "|": t=time(ms) u=url n=number b=bool tr=chrome transition fv=firefox visit type a=auto-detect timestamp
+// tl = mapping into the combined timeline: column indexes for time,url,title,type
+const SPECS = [
+  // ===== Chromium (Chrome / Edge / Brave / Opera / Vivaldi) =====
+  { b:'Chromium', need:['urls','visits'], name:'Visits', tl:{t:0,u:1,ti:2,ty:3},
+    sql: h => `SELECT ${sel([
+      `${WK('v.visit_time')} AS "Visit Time|t"`, `u.url AS "URL|u"`, `u.title AS "Title"`, `v.transition AS "Transition|tr"`,
+      h('visits','visit_duration') && `ROUND(v.visit_duration / 1000000.0, 3) AS "Duration (s)|n"`,
+      `u.visit_count AS "URL Visits|n"`, `u.typed_count AS "Typed Count|n"`, `v.id AS "Visit ID|n"`,
+      h('visits','from_visit') && `v.from_visit AS "From Visit|n"`,
+      h('visits','opener_visit') && `v.opener_visit AS "Opener Visit|n"`,
+      h('visits','originator_cache_guid') && `v.originator_cache_guid AS "Synced From (GUID)"`,
+    ])} FROM visits v LEFT JOIN urls u ON u.id = v.url ORDER BY v.visit_time` },
+  { b:'Chromium', need:['urls'], name:'URLs',
+    sql: h => `SELECT ${sel([
+      `${WK('last_visit_time')} AS "Last Visit|t"`, `url AS "URL|u"`, `title AS "Title"`, `visit_count AS "Visits|n"`, `typed_count AS "Typed Count|n"`,
+      h('urls','hidden') && `hidden AS "Hidden|b"`, `id AS "URL ID|n"`,
+    ])} FROM urls ORDER BY last_visit_time` },
+  { b:'Chromium', need:['downloads'], name:'Downloads',
+    sql: h => `SELECT ${sel([
+      `${WK('d.start_time')} AS "Start|t"`, h('downloads','end_time') && `${WK('d.end_time')} AS "End|t"`,
+      h('downloads_url_chains') && `(SELECT c.url FROM downloads_url_chains c WHERE c.id = d.id ORDER BY c.chain_index DESC LIMIT 1) AS "Final URL|u"`,
+      h('downloads','target_path') && `d.target_path AS "Target Path"`,
+      h('downloads','received_bytes') && `d.received_bytes AS "Received (bytes)|n"`, h('downloads','total_bytes') && `d.total_bytes AS "Total (bytes)|n"`,
+      `d.state AS "State|ds"`, h('downloads','danger_type') && `d.danger_type AS "Danger|dg"`,
+      h('downloads','opened') && `d.opened AS "Opened|b"`, h('downloads','last_access_time') && `${WK('d.last_access_time')} AS "Last Opened|t"`,
+      h('downloads','referrer') && `d.referrer AS "Referrer|u"`, h('downloads','tab_url') && `d.tab_url AS "Tab URL|u"`,
+      h('downloads','mime_type') && `d.mime_type AS "MIME"`,
+      h('downloads_url_chains') && `(SELECT group_concat(url, '  →  ') FROM (SELECT c.url FROM downloads_url_chains c WHERE c.id = d.id ORDER BY c.chain_index)) AS "Redirect Chain"`,
+      `d.id AS "ID|n"`,
+    ])} FROM downloads d ORDER BY d.start_time` },
+  { b:'Chromium', need:['keyword_search_terms','urls'], name:'Search Terms',
+    sql: () => `SELECT ${WK('u.last_visit_time')} AS "Last Visit|t", k.term AS "Search Term", u.url AS "URL|u", u.title AS "Title", u.visit_count AS "Visits|n"
+      FROM keyword_search_terms k LEFT JOIN urls u ON u.id = k.url_id ORDER BY u.last_visit_time` },
+  { b:'Chromium', need:['segments','segment_usage'], name:'Segments (Most Visited)',
+    sql: () => `SELECT ${WK('su.time_slot')} AS "Time Slot|t", s.name AS "Segment", su.visit_count AS "Visits|n", u.url AS "URL|u"
+      FROM segment_usage su JOIN segments s ON s.id = su.segment_id LEFT JOIN urls u ON u.id = s.url_id ORDER BY su.time_slot` },
+  { b:'Chromium', need:['omni_box_shortcuts'], name:'Omnibox Shortcuts',
+    sql: h => `SELECT ${sel([`${WK('last_access_time')} AS "Last Access|t"`, `text AS "Typed Text"`, `fill_into_edit AS "Completed To"`, `url AS "URL|u"`, `contents AS "Contents"`, h('omni_box_shortcuts','description') && `description AS "Description"`, `number_of_hits AS "Hits|n"`])}
+      FROM omni_box_shortcuts ORDER BY last_access_time` },
+  { b:'Chromium', need:['cookies'], when: h => h('cookies','host_key'), name:'Cookies',
+    sql: h => `SELECT ${sel([
+      `${WK('creation_utc')} AS "Created|t"`, h('cookies','last_access_utc') && `${WK('last_access_utc')} AS "Last Access|t"`, `${WK('expires_utc')} AS "Expires|t"`,
+      `host_key AS "Host"`, `name AS "Name"`, `path AS "Path"`,
+      h('cookies','encrypted_value') ? `CASE WHEN length(value) > 0 THEN value WHEN length(encrypted_value) > 0 THEN '[encrypted ' || length(encrypted_value) || ' bytes]' ELSE '' END AS "Value"` : `value AS "Value"`,
+      h('cookies','is_secure') && `is_secure AS "Secure|b"`, h('cookies','is_httponly') && `is_httponly AS "HttpOnly|b"`,
+      h('cookies','is_persistent') && `is_persistent AS "Persistent|b"`,
+    ])} FROM cookies ORDER BY creation_utc` },
+  { b:'Chromium', need:['logins'], name:'Saved Logins',
+    sql: h => `SELECT ${sel([
+      `${WK('date_created')} AS "Created|t"`, h('logins','date_last_used') && `${WK('date_last_used')} AS "Last Used|t"`,
+      h('logins','date_password_modified') && `${WK('date_password_modified')} AS "Password Changed|t"`,
+      `origin_url AS "Origin|u"`, h('logins','action_url') && `action_url AS "Form Action|u"`, `username_value AS "Username"`,
+      h('logins','password_value') && `CASE WHEN length(password_value) > 0 THEN '[encrypted ' || length(password_value) || ' bytes]' ELSE '' END AS "Password"`,
+      h('logins','times_used') && `times_used AS "Times Used|n"`, h('logins','blacklisted_by_user') && `blacklisted_by_user AS "Never Save|b"`,
+      `signon_realm AS "Realm"`,
+    ])} FROM logins ORDER BY date_created` },
+  { b:'Chromium', need:['autofill'], when: h => h('autofill','date_created'), name:'Autofill',
+    sql: () => `SELECT ${US('date_created')} AS "First Used|t", ${US('date_last_used')} AS "Last Used|t", name AS "Field", value AS "Value", count AS "Count|n"
+      FROM autofill ORDER BY date_last_used` },
+
+  // ===== Firefox =====
+  { b:'Firefox', need:['moz_places','moz_historyvisits'], name:'Visits', tl:{t:0,u:1,ti:2,ty:3},
+    sql: h => `SELECT ${sel([
+      `${PR('v.visit_date')} AS "Visit Time|t"`, `p.url AS "URL|u"`, `p.title AS "Title"`, `v.visit_type AS "Visit Type|fv"`,
+      `p.visit_count AS "URL Visits|n"`, h('moz_places','typed') && `p.typed AS "Typed|b"`, `v.id AS "Visit ID|n"`, `v.from_visit AS "From Visit|n"`,
+      h('moz_historyvisits','source') && `v.source AS "Source|n"`,
+    ])} FROM moz_historyvisits v LEFT JOIN moz_places p ON p.id = v.place_id ORDER BY v.visit_date` },
+  { b:'Firefox', need:['moz_places'], name:'Places (URLs)',
+    sql: h => `SELECT ${sel([
+      `${PR('last_visit_date')} AS "Last Visit|t"`, `url AS "URL|u"`, `title AS "Title"`, `visit_count AS "Visits|n"`,
+      h('moz_places','typed') && `typed AS "Typed|b"`, h('moz_places','frecency') && `frecency AS "Frecency|n"`,
+      h('moz_places','hidden') && `hidden AS "Hidden|b"`, h('moz_places','description') && `description AS "Description"`, `id AS "Place ID|n"`,
+    ])} FROM moz_places ORDER BY last_visit_date` },
+  { b:'Firefox', need:['moz_annos','moz_anno_attributes','moz_places'], name:'Downloads',
+    sql: () => `SELECT ${PR('a.dateAdded')} AS "Added|t",
+        json_extract(m.content, '$.endTime') AS "Finished|t",
+        p.url AS "Source URL|u", a.content AS "Destination",
+        json_extract(m.content, '$.fileSize') AS "Size (bytes)|n",
+        json_extract(m.content, '$.state') AS "State (raw)|n",
+        CASE json_extract(m.content, '$.deleted') WHEN 1 THEN 'Yes' WHEN 0 THEN 'No' END AS "Deleted",
+        p.title AS "Title", m.content AS "Metadata (JSON)"
+      FROM moz_annos a
+      JOIN moz_anno_attributes n ON n.id = a.anno_attribute_id AND n.name = 'downloads/destinationFileURI'
+      LEFT JOIN moz_places p ON p.id = a.place_id
+      LEFT JOIN (SELECT a2.place_id, a2.content FROM moz_annos a2 JOIN moz_anno_attributes n2 ON n2.id = a2.anno_attribute_id AND n2.name = 'downloads/metaData') m ON m.place_id = a.place_id
+      ORDER BY a.dateAdded` },
+  { b:'Firefox', need:['moz_bookmarks','moz_places'], name:'Bookmarks',
+    sql: () => `SELECT ${PR('b.dateAdded')} AS "Added|t", ${PR('b.lastModified')} AS "Modified|t", b.title AS "Title", p.url AS "URL|u",
+        (SELECT f.title FROM moz_bookmarks f WHERE f.id = b.parent) AS "Folder", b.id AS "Bookmark ID|n"
+      FROM moz_bookmarks b LEFT JOIN moz_places p ON p.id = b.fk WHERE b.type = 1 ORDER BY b.dateAdded` },
+  { b:'Firefox', need:['moz_inputhistory','moz_places'], name:'Typed Input',
+    sql: () => `SELECT ${PR('p.last_visit_date')} AS "URL Last Visit|t", i.input AS "Typed Text", p.url AS "URL|u", p.title AS "Title", ROUND(i.use_count, 3) AS "Use Count|n"
+      FROM moz_inputhistory i LEFT JOIN moz_places p ON p.id = i.place_id ORDER BY p.last_visit_date` },
+  { b:'Firefox', need:['moz_formhistory'], name:'Form History',
+    sql: () => `SELECT ${PR('firstUsed')} AS "First Used|t", ${PR('lastUsed')} AS "Last Used|t", fieldname AS "Field", value AS "Value", timesUsed AS "Times Used|n"
+      FROM moz_formhistory ORDER BY lastUsed` },
+  { b:'Firefox', need:['moz_cookies'], name:'Cookies',
+    sql: h => `SELECT ${sel([
+      `${PR('creationTime')} AS "Created|t"`, `${PR('lastAccessed')} AS "Last Access|t"`, `expiry AS "Expires|a"`,
+      `host AS "Host"`, `name AS "Name"`, `path AS "Path"`, `value AS "Value"`,
+      h('moz_cookies','isSecure') && `isSecure AS "Secure|b"`, h('moz_cookies','isHttpOnly') && `isHttpOnly AS "HttpOnly|b"`,
+    ])} FROM moz_cookies ORDER BY creationTime` },
+
+  // ===== Safari =====
+  { b:'Safari', need:['history_items','history_visits'], name:'Visits', tl:{t:0,u:1,ti:2,ty:-1},
+    sql: h => `SELECT ${sel([
+      `${MAC('v.visit_time')} AS "Visit Time|t"`, `i.url AS "URL|u"`, `v.title AS "Title"`,
+      h('history_visits','load_successful') && `v.load_successful AS "Loaded|b"`,
+      h('history_visits','redirect_source') && `(SELECT ii.url FROM history_visits rv JOIN history_items ii ON ii.id = rv.history_item WHERE rv.id = v.redirect_source) AS "Redirected From|u"`,
+      h('history_visits','redirect_destination') && `(SELECT ii.url FROM history_visits rv JOIN history_items ii ON ii.id = rv.history_item WHERE rv.id = v.redirect_destination) AS "Redirected To|u"`,
+      `i.visit_count AS "URL Visits|n"`, `v.id AS "Visit ID|n"`,
+      h('history_visits','origin') && `v.origin AS "Origin (0=local,1=iCloud)|n"`,
+    ])} FROM history_visits v LEFT JOIN history_items i ON i.id = v.history_item ORDER BY v.visit_time` },
+  { b:'Safari', need:['history_items'], name:'History Items (URLs)',
+    sql: h => `SELECT ${sel([
+      h('history_visits') && `(SELECT ${MAC('MAX(v.visit_time)')} FROM history_visits v WHERE v.history_item = i.id) AS "Last Visit|t"`,
+      `i.url AS "URL|u"`, h('history_items','domain_expansion') && `i.domain_expansion AS "Domain Expansion"`,
+      `i.visit_count AS "Visits|n"`, `i.id AS "Item ID|n"`,
+    ])} FROM history_items i ORDER BY i.id` },
+];
+
+/* ---------- WAL merge (forensic: applies committed, checksum-valid frames only) ---------- */
+function walChecksum(u8, off, len, littleEndian, s0, s1) {
+  const dv = new DataView(u8.buffer, u8.byteOffset + off, len);
+  for (let i = 0; i < len; i += 8) {
+    s0 = (s0 + dv.getUint32(i, littleEndian) + s1) >>> 0;
+    s1 = (s1 + dv.getUint32(i + 4, littleEndian) + s0) >>> 0;
+  }
+  return [s0, s1];
+}
+function applyWal(db, wal) {
+  const info = { frames: 0, committedFrames: 0, commits: 0, pages: 0, uncommittedFrames: 0, stop: '' };
+  if (wal.length < 32) { info.stop = 'WAL file is empty'; return { buf: db, info }; }
+  const w = new DataView(wal.buffer, wal.byteOffset, wal.byteLength);
+  const magic = w.getUint32(0);
+  if (magic !== 0x377f0682 && magic !== 0x377f0683) throw new Error('Not a SQLite WAL file (bad magic)');
+  const le = magic === 0x377f0682;
+  const pageSize = w.getUint32(8), salt1 = w.getUint32(16), salt2 = w.getUint32(20);
+  let [s0, s1] = walChecksum(wal, 0, 24, le, 0, 0);
+  if (s0 !== w.getUint32(24) || s1 !== w.getUint32(28)) { info.stop = 'WAL header checksum mismatch — WAL not applied'; return { buf: db, info }; }
+  const pending = new Map(), committed = new Map();
+  let dbPages = 0, off = 32;
+  while (off + 24 + pageSize <= wal.length) {
+    const pg = w.getUint32(off), commit = w.getUint32(off + 4);
+    if (w.getUint32(off + 8) !== salt1 || w.getUint32(off + 12) !== salt2) { info.stop = 'salt mismatch (older WAL generation follows)'; break; }
+    [s0, s1] = walChecksum(wal, off, 8, le, s0, s1);
+    [s0, s1] = walChecksum(wal, off + 24, pageSize, le, s0, s1);
+    if (s0 !== w.getUint32(off + 16) || s1 !== w.getUint32(off + 20)) { info.stop = 'frame checksum mismatch'; break; }
+    pending.set(pg, off + 24); info.frames++;
+    if (commit) { for (const [k, v] of pending) committed.set(k, v); info.committedFrames += pending.size; pending.clear(); dbPages = commit; info.commits++; }
+    off += 24 + pageSize;
+  }
+  info.uncommittedFrames = pending.size;
+  if (!info.commits) { info.stop = info.stop || 'no committed transactions in WAL'; return { buf: db, info }; }
+  const out = new Uint8Array(dbPages * pageSize);
+  out.set(db.subarray(0, Math.min(db.length, out.length)));
+  for (const [pg, o] of committed) if (pg <= dbPages) out.set(wal.subarray(o, o + pageSize), (pg - 1) * pageSize);
+  info.pages = committed.size;
+  return { buf: out, info };
+}
+
+/* ---------- loading ---------- */
+async function sha256(u8) {
+  try { const h = await crypto.subtle.digest('SHA-256', u8); return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join(''); }
+  catch { return '(unavailable in this context)'; }
+}
+const isSqlite = u8 => u8.length >= 16 && new TextDecoder().decode(u8.subarray(0, 15)) === 'SQLite format 3';
+const fmtBytes = n => n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(2)} MB`;
+
+async function handleFiles(list) {
+  const files = [...list]; if (!files.length) return;
+  showLoading(true);
+  try {
+    await sqlReady;
+    const wals = new Map(), mains = [];
+    for (const f of files) {
+      if (/-wal$/i.test(f.name)) wals.set(f.name.replace(/-wal$/i, ''), f);
+      else if (/-(shm|journal)$/i.test(f.name)) continue;
+      else mains.push(f);
+    }
+    let first = null;
+    for (const f of mains) {
+      const buf = new Uint8Array(await f.arrayBuffer());
+      if (!isSqlite(buf)) { toast(`${f.name} is not a SQLite database — skipped`, true); continue; }
+      const wf = wals.get(f.name); wals.delete(f.name);
+      const wal = wf ? new Uint8Array(await wf.arrayBuffer()) : null;
+      const src = await addSource(f.name, buf, wal, wf && wf.name);
+      if (src && !first) first = src;
+    }
+    for (const [base] of wals) toast(`Got ${base}-wal without ${base} — drop both together`, true);
+    afterLoad(first);
+  } catch (e) { console.error(e); toast('Error: ' + e.message, true); }
+  finally { showLoading(false); }
+}
+
+async function addSource(name, original, wal, walName, opts = {}) {
+  const id = 'f' + (++S.seq);
+  const notes = [];
+  const hash = await sha256(original);
+  const walHash = wal ? await sha256(wal) : null;
+  let buf = original.slice();      // never touch the original bytes
+  const walMode = buf[18] === 2 || buf[19] === 2;
+  let walInfo = null;
+  if (wal) {
+    try { const r = applyWal(buf, wal); buf = r.buf; walInfo = r.info; }
+    catch (e) { notes.push('WAL not applied: ' + e.message); }
+    if (walInfo && walInfo.stop && !walInfo.commits) notes.push('WAL: ' + walInfo.stop);
+  } else if (walMode) {
+    notes.push(`Database is in WAL mode. Recent records may still sit in "${name}-wal" — drop it together with the database to merge it.`);
+  }
+  if (buf[18] === 2 || buf[19] === 2) { buf[18] = 1; buf[19] = 1; }  // open the in-memory copy in rollback-journal mode
+  let db;
+  try { db = new SQL.Database(buf); db.exec('SELECT count(*) FROM sqlite_master'); }
+  catch (e) { toast(`Could not open ${name}: ${e.message}`, true); return null; }
+
+  const schema = new Map();
+  for (const [t] of (db.exec("SELECT name FROM sqlite_master WHERE type='table'")[0]?.values || [])) {
+    const cols = (db.exec(`PRAGMA table_info("${String(t).replace(/"/g, '""')}")`)[0]?.values || []).map(r => String(r[1]).toLowerCase());
+    schema.set(String(t).toLowerCase(), new Set(cols));
+  }
+  const h = (t, c) => schema.has(t.toLowerCase()) && (c == null || schema.get(t.toLowerCase()).has(c.toLowerCase()));
+
+  const f = { id, name: opts.label || name, origName: name, size: original.length, hash, walName, walHash, walSize: wal ? wal.length : 0, walInfo, walMode, notes, db, schema,
+              browser: 'SQLite', reports: [], tables: [], sqlText: '', sqlReport: null, sqlErr: '', sample: !!opts.sample };
+
+  for (const spec of SPECS) {
+    if (!spec.need.every(t => h(t))) continue;
+    if (spec.when && !spec.when(h)) continue;
+    if (f.browser === 'SQLite') f.browser = spec.b;
+    if (spec.b !== f.browser) continue;
+    try {
+      const r = runQuery(db, spec.sql(h), spec.name, f);
+      r.tl = spec.tl || null;
+      f.reports.push(r);
+    } catch (e) { notes.push(`${spec.name}: ${e.message}`); console.warn(spec.name, e); }
+  }
+  f.tables = (db.exec("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")[0]?.values || []).map(([t]) => {
+    let n = null; try { n = db.exec(`SELECT count(*) FROM "${String(t).replace(/"/g, '""')}"`)[0].values[0][0]; } catch {}
+    return { name: t, count: n };
+  });
+  f.sqlText = defaultSql(f);
+  f.info = makeInfo(f);
+  S.files.push(f);
+  return f;
+}
+
+function runQuery(db, sql, name, f) {
+  const stmt = db.prepare(sql);
+  const names = stmt.getColumnNames();
+  const cols = names.map(n => { const i = n.lastIndexOf('|'); return i > 0 ? { label: n.slice(0, i), type: n.slice(i + 1) } : { label: n, type: '' }; });
+  const rows = [];
+  while (stmt.step()) {
+    const row = stmt.get();
+    for (let i = 0; i < cols.length; i++) if (cols[i].type) row[i] = postValue(cols[i].type, row[i]);
+    rows.push(row);
+  }
+  stmt.free();
+  cols.forEach(c => c.type = typeOut(c.type));
+  return mkReport(name, cols, rows, f);
+}
+function mkReport(name, cols, rows, f) {
+  const r = { id: 'r' + (++S.seq), name, cols, rows, fileId: f ? f.id : null, src: f ? f.name : 'All sources', browser: f ? f.browser : '' };
+  S.reports.set(r.id, r);
+  return r;
+}
+// Auto-detect numeric timestamp columns in generic tables / ad-hoc queries; adds a decoded column next to each
+const TIMEY = /(time|date|utc|_at$|^at_|created|modified|accessed|expir|last|first|start|end|visited|stamp)/i;
+function autoDecode(cols, rows) {
+  const add = [];
+  cols.forEach((c, i) => {
+    if (c.type || !TIMEY.test(c.label)) return;
+    let fmt = null;
+    for (let k = 0; k < rows.length && k < 500; k++) { const v = rows[k][i]; if (typeof v === 'number' && v) { fmt = guessFmt(v); break; } }
+    if (fmt) add.push({ i, fmt });
+  });
+  if (!add.length) return { cols, rows };
+  const ncols = [], map = [];
+  cols.forEach((c, i) => { ncols.push(c); map.push([i]); const a = add.find(x => x.i === i); if (a) { ncols.push({ label: `${c.label} → ${a.fmt.name}`, type: 't', decoded: true }); map.push([i, a.fmt]); } });
+  const nrows = rows.map(row => map.map(([i, fmt]) => { const v = row[i]; return fmt ? (typeof v === 'number' && v ? fmt.to(v) : null) : v; }));
+  return { cols: ncols, rows: nrows };
+}
+function tableReport(f, t) {
+  const key = `${f.id}:${t}`;
+  const cached = [...S.reports.values()].find(r => r.tableKey === key);
+  if (cached) return cached;
+  const stmt = f.db.prepare(`SELECT * FROM "${t.replace(/"/g, '""')}" LIMIT 250000`);
+  const cols = stmt.getColumnNames().map(n => ({ label: n, type: '' })), rows = [];
+  while (stmt.step()) rows.push(stmt.get());
+  stmt.free();
+  const d = autoDecode(cols, rows);
+  const r = mkReport(t, d.cols, d.rows, f); r.tableKey = key; r.raw = true;
+  return r;
+}
+function makeInfo(f) {
+  const ps = f.db.exec('PRAGMA page_size')[0]?.values[0][0];
+  const uv = f.db.exec('PRAGMA user_version')[0]?.values[0][0];
+  let ver = null; try { ver = f.db.exec("SELECT value FROM meta WHERE key='version'")[0]?.values[0][0]; } catch {}
+  const rows = [
+    ['File name', f.origName], ['Size', `${fmtBytes(f.size)} (${f.size.toLocaleString()} bytes)`], ['SHA-256', f.hash],
+    ['Detected as', f.browser === 'SQLite' ? 'Generic SQLite database' : `${f.browser} artifact`],
+    ['Journal mode (on disk)', f.walMode ? 'WAL' : 'Rollback journal'], ['Page size', ps], ['user_version', uv],
+  ];
+  if (ver != null) rows.push(['Chromium schema version (meta)', ver]);
+  if (f.walName) {
+    rows.push(['WAL file', `${f.walName} — ${fmtBytes(f.walSize)}`], ['WAL SHA-256', f.walHash]);
+    if (f.walInfo) {
+      const wi = f.walInfo;
+      rows.push(['WAL frames (valid)', wi.frames], ['WAL commits applied', wi.commits], ['Pages updated from WAL', wi.pages]);
+      if (wi.uncommittedFrames) rows.push(['Uncommitted frames (ignored)', wi.uncommittedFrames]);
+      if (wi.stop) rows.push(['WAL scan stopped', wi.stop]);
+    }
+  }
+  rows.push(['Tables', f.tables.length], ['Parsed reports', f.reports.map(r => `${r.name} (${r.rows.length.toLocaleString()})`).join(', ') || '—']);
+  f.notes.forEach(n => rows.push(['Note', n]));
+  rows.push(['Engine', `sql.js (${ENGINE}) — in-memory copy; the original file is never modified`]);
+  return mkReport('File Info', [{ label: 'Property', type: '' }, { label: 'Value', type: '' }], rows, f);
+}
+function defaultSql(f) {
+  if (f.browser === 'Chromium' && f.reports.some(r => r.name === 'Visits'))
+    return `-- Top 25 most visited URLs\nSELECT url, title, visit_count, typed_count, last_visit_time\nFROM urls ORDER BY visit_count DESC LIMIT 25;`;
+  if (f.browser === 'Firefox' && f.reports.some(r => r.name === 'Visits'))
+    return `-- Top 25 most visited places\nSELECT url, title, visit_count, frecency, last_visit_date\nFROM moz_places ORDER BY visit_count DESC LIMIT 25;`;
+  if (f.browser === 'Safari')
+    return `-- Top 25 most visited URLs\nSELECT url, visit_count FROM history_items ORDER BY visit_count DESC LIMIT 25;`;
+  return `-- Schema of every table\nSELECT type, name, sql FROM sqlite_master ORDER BY type, name;`;
+}
+const PRESETS = {
+  Chromium: [
+    ['Typed URLs', `SELECT url, title, typed_count, last_visit_time FROM urls WHERE typed_count > 0 ORDER BY last_visit_time DESC;`],
+    ['Visits per day', `SELECT date((visit_time/1000000) - 11644473600, 'unixepoch') AS day, count(*) AS visits\nFROM visits GROUP BY day ORDER BY day;`],
+    ['Redirect chains', `SELECT v.id, v.from_visit, u.url, v.transition, v.visit_time\nFROM visits v JOIN urls u ON u.id = v.url\nWHERE (v.transition & 0xC0000000) != 0 ORDER BY v.visit_time;`],
+  ],
+  Firefox: [
+    ['Typed URLs', `SELECT url, title, visit_count, last_visit_date FROM moz_places WHERE typed = 1 ORDER BY last_visit_date DESC;`],
+    ['Visits per day', `SELECT date(visit_date/1000000, 'unixepoch') AS day, count(*) AS visits\nFROM moz_historyvisits GROUP BY day ORDER BY day;`],
+    ['Annotations', `SELECT a.id, n.name, p.url, a.content, a.dateAdded\nFROM moz_annos a JOIN moz_anno_attributes n ON n.id = a.anno_attribute_id\nLEFT JOIN moz_places p ON p.id = a.place_id;`],
+  ],
+  Safari: [
+    ['Visits per day', `SELECT date(visit_time + 978307200, 'unixepoch') AS day, count(*) AS visits\nFROM history_visits GROUP BY day ORDER BY day;`],
+    ['Failed loads', `SELECT v.visit_time, i.url, v.title FROM history_visits v JOIN history_items i ON i.id = v.history_item WHERE v.load_successful = 0;`],
+  ],
+  SQLite: [],
+};
+const COMMON_PRESETS = [
+  ['Schema', `SELECT type, name, sql FROM sqlite_master ORDER BY type, name;`],
+  ['Freelist pages', `PRAGMA freelist_count;`],
+];
+
+/* ---------- combined timeline ---------- */
+const hostOf = u => { const m = /^[a-z][\w+.-]*:\/\/(?:[^@\/?#]*@)?([^\/?#:]+)/i.exec(u || ''); return m ? m[1].toLowerCase() : ''; };
+function buildCombined() {
+  for (const r of S.combined) S.reports.delete(r.id);
+  S.combined = [];
+  const vis = S.files.flatMap(f => f.reports.filter(r => r.tl).map(r => ({ f, r })));
+  if (!vis.length) return;
+  const rows = [];
+  for (const { f, r } of vis) {
+    const m = r.tl;
+    for (const row of r.rows) rows.push([row[m.t], f.browser, f.name, row[m.u], hostOf(row[m.u]), row[m.ti], m.ty >= 0 ? row[m.ty] : null]);
+  }
+  rows.sort((a, b) => (a[0] ?? Infinity) - (b[0] ?? Infinity));
+  const tl = mkReport('Combined Timeline', [
+    { label: 'Visit Time', type: 't' }, { label: 'Browser', type: '' }, { label: 'Source', type: '' }, { label: 'URL', type: 'u' },
+    { label: 'Domain', type: '' }, { label: 'Title', type: '' }, { label: 'Visit Type', type: 'tr' }], rows, null);
+  const dm = new Map();
+  for (const row of rows) {
+    const d = row[4] || '(none)';
+    let e = dm.get(d); if (!e) dm.set(d, e = [d, 0, null, null, new Set()]);
+    e[1]++; if (row[0] != null) { if (e[2] == null || row[0] < e[2]) e[2] = row[0]; if (e[3] == null || row[0] > e[3]) e[3] = row[0]; }
+    e[4].add(row[1]);
+  }
+  const drows = [...dm.values()].map(e => [e[0], e[1], e[2], e[3], [...e[4]].join(', ')]).sort((a, b) => b[1] - a[1]);
+  const dom = mkReport('Domains', [{ label: 'Domain', type: '' }, { label: 'Visits', type: 'n' }, { label: 'First Seen', type: 't' }, { label: 'Last Seen', type: 't' }, { label: 'Browsers', type: '' }], drows, null);
+  S.combined = [tl, dom];
+}
+
+/* ---------- sidebar ---------- */
+function renderSide() {
+  const v = S.view, on = id => v && v.report && v.report.id === id && !v.sql ? ' on' : '';
+  const item = (r, cls = '') => `<div class="it${cls}${on(r.id)}" data-r="${r.id}"><span class="nm">${esc(r.name)}</span><span class="cnt">${r.rows.length.toLocaleString()}</span></div>`;
+  let h = '';
+  if (!S.files.length) { h = `<div class="grp">Sources</div><div class="it tool" style="cursor:default"><span class="nm">No files loaded yet</span></div>`; $('#side').innerHTML = h; return; }
+  if (S.combined.length) { h += `<div class="grp">All sources</div>` + S.combined.map(r => item(r)).join(''); }
+  h += `<div class="grp">Sources</div>`;
+  for (const f of S.files) {
+    h += `<div class="src"><div class="srchead"><span class="badge b-${f.browser.toLowerCase()}">${esc(f.browser)}</span><span class="fname" title="${esc(f.origName)}">${esc(f.name)}</span><button class="x" data-rm="${f.id}" title="Close">×</button></div>`;
+    h += f.reports.map(r => item(r)).join('');
+    h += `<details${f.openTables ? ' open' : ''} data-tbls="${f.id}"><summary class="it tool"><span class="nm"><span class="car">▸</span> Raw tables</span><span class="cnt">${f.tables.length}</span></summary>`;
+    for (const t of f.tables) {
+      const key = `${f.id}:${t.name}`, act = v && v.report && v.report.tableKey === key ? ' on' : '';
+      h += `<div class="it sub${act}" data-tbl="${f.id}" data-t="${esc(t.name)}"><span class="nm">${esc(t.name)}</span><span class="cnt">${t.count == null ? '?' : t.count.toLocaleString()}</span></div>`;
+    }
+    h += `</details>`;
+    h += item(f.info, ' tool');
+    h += `<div class="it tool${v && v.sql && v.fileId === f.id ? ' on' : ''}" data-sql="${f.id}"><span class="nm">SQL console</span><span class="cnt">›_</span></div></div>`;
+  }
+  $('#side').innerHTML = h;
+}
+
+/* ---------- views ---------- */
+function openReport(r, extra = {}) {
+  S.view = Object.assign({ report: r, idx: null, sort: null, sel: -1, filter: '', from: null, to: null, fileId: r ? r.fileId : null, widths: null }, extra);
+  applyFilter();
+  renderMain(); renderSide();
+}
+function openSql(f) {
+  S.view = { sql: true, fileId: f.id, report: f.sqlReport, idx: null, sort: null, sel: -1, filter: '', from: null, to: null };
+  if (f.sqlReport) applyFilter();
+  renderMain(); renderSide();
+  const ta = $('#sqlta'); if (ta) ta.focus();
+}
+function afterLoad(first) {
+  buildCombined();
+  if (first) {
+    const tl = S.combined[0];
+    openReport(tl && S.files.length > 1 ? tl : (first.reports[0] || first.info));
+  } else { renderSide(); if (!S.view) renderMain(); }
+}
+
+const fileById = id => S.files.find(f => f.id === id);
+function renderMain() {
+  const m = $('#main'), v = S.view;
+  if (!S.files.length || !v) { m.innerHTML = emptyHtml(); return; }
+  const r = v.report, f = fileById(v.fileId);
+  const crumb = v.sql ? esc(f.name) : (r ? esc(r.src) : '');
+  const title = v.sql ? 'SQL console' : esc(r.name);
+  const hasT = r && r.cols.some(c => c.type === 't');
+  let h = `<div class="bar"><div class="ttl"><span class="crumb">${crumb} /</span><b>${title}</b><span class="count" id="count"></span></div>`;
+  if (r) {
+    h += `<input class="in" id="q" placeholder="Filter rows…  (all columns)" value="${esc(v.filter)}" autocomplete="off" spellcheck="false">`;
+    if (hasT) h += `<div class="rng">From <input class="in" type="datetime-local" step="1" id="from"> to <input class="in" type="datetime-local" step="1" id="to"><span id="tzlbl">${S.tz === 'utc' ? 'UTC' : 'local'}</span></div>`;
+    if (suiteOk() && hasT) h += `<button class="btn small" id="toRecap" title="Open these rows as a timeline in Recap">Send to Recap</button><button class="btn small" id="toTessera" title="Add these rows to the case notebook as key events">Send to Tessera</button>`;
+    h += `<button class="btn small" id="copy" title="Copy the filtered rows as CSV">Copy CSV</button><button class="btn small" id="dl" title="Download the filtered rows as CSV">Download CSV</button>`;
+  }
+  h += `</div>`;
+  if (v.sql) {
+    const pre = [...(PRESETS[f.browser] || []), ...COMMON_PRESETS];
+    h += `<div class="console"><textarea id="sqlta" spellcheck="false">${esc(f.sqlText)}</textarea>
+      <div class="side"><button class="btn primary" id="run">Run ⌘/Ctrl+Enter</button>
+      <label class="chk"><input type="checkbox" id="autodec" ${f.autoDec !== false ? 'checked' : ''}> Auto-decode timestamps</label>
+      <span class="hint">Runs on an in-memory copy.</span></div>
+      <div class="presets">${pre.map((p, i) => `<button class="btn small" data-preset="${i}">${esc(p[0])}</button>`).join('')}</div>
+      ${f.sqlErr ? `<div class="err">${esc(f.sqlErr)}</div>` : ''}</div>`;
+  }
+  h += `<div class="body"><div id="gridwrap">${r ? gridShell(r) : `<div class="nodata">Write a query and press Run.</div>`}</div><div id="detail" hidden></div></div>`;
+  m.innerHTML = h;
+  if (r) { renderRows(); updateCount(); $('#gridwrap').addEventListener('scroll', () => requestAnimationFrame(renderRows)); }
+  if (v.sel >= 0 && r) showDetail(v.sel);
+}
+
+function emptyHtml() {
+  return `<div class="empty"><div class="drop">
+    <h1>Drop browser artifacts here</h1>
+    <p>Schema parses SQLite databases right in your browser using SQLite compiled to WebAssembly. Known browser artifacts are decoded automatically: timestamps, visit transitions and download states. Anything else gets a table browser and a SQL console.</p>
+    <div class="acts"><label class="btn primary">Choose files…<input type="file" id="fi2" multiple hidden></label><button class="btn" id="sample">Try with sample data</button></div>
+    <div class="sup">
+      <div><b><span class="badge b-chromium">Chromium</span></b><code>History<br>Cookies · Login Data<br>Web Data · Shortcuts</code></div>
+      <div><b><span class="badge b-firefox">Firefox</span></b><code>places.sqlite<br>cookies.sqlite<br>formhistory.sqlite</code></div>
+      <div><b><span class="badge b-safari">Safari</span></b><code>History.db<br><br>+ any other SQLite file</code></div>
+    </div>
+    <div class="tips">
+      Chrome, Edge, Brave, Opera and Vivaldi all share the Chromium format. Drop several files at once to get a combined, cross-browser timeline.<br>
+      Copy the <code>-wal</code> file alongside the database (e.g. <code>History</code> + <code>History-wal</code>). Schema merges committed, checksum-valid WAL frames into an in-memory copy.<br>
+      Browsers lock these files while running. Work from a copy or a forensic image, not the live profile.
+    </div>
+    <p class="tips" style="margin-top:14px">&copy; 2026 <a href="https://jon.glass/" style="color:inherit">Jon Glass</a> &middot; <a href="https://github.com/glassdfir/schema/blob/main/LICENSE" style="color:inherit">MIT License</a> &middot; <a href="https://github.com/glassdfir/schema" style="color:inherit">Source</a> &middot; SQLite engine: <a href="https://github.com/sql-js/sql.js" style="color:inherit">sql.js</a> (MIT)</p></div></div>`;
+}
+
+/* ---------- grid ---------- */
+const RH = 27;
+const DEFW = { t: 196, u: 380, n: 100, b: 80, tr: 250, fv: 160 };
+function colWidth(c) {
+  if (c.w) return c.w;
+  if (DEFW[c.type]) return DEFW[c.type];
+  if (/title|path|destination|chain|value|metadata|sql/i.test(c.label)) return 300;
+  return Math.min(260, Math.max(110, c.label.length * 9 + 30));
+}
+function gridShell(r) {
+  const v = S.view, total = r.cols.reduce((s, c) => s + colWidth(c), 0);
+  const ths = r.cols.map((c, i) => {
+    const ar = v.sort && v.sort.col === i ? `<span class="ar">${v.sort.dir > 0 ? '▲' : '▼'}</span>` : '';
+    const lbl = c.type === 't' ? `${c.label} (${S.tz === 'utc' ? 'UTC' : 'local'})` : c.label;
+    return `<th data-c="${i}" title="${esc(lbl)}" style="position:sticky">${esc(lbl)}${ar}<span class="rz" data-rz="${i}"></span></th>`;
+  }).join('');
+  return `<table id="grid" style="width:${total}px"><colgroup>${r.cols.map((c, i) => `<col data-col="${i}" style="width:${colWidth(c)}px">`).join('')}</colgroup><thead><tr>${ths}</tr></thead><tbody></tbody></table>`;
+}
+function cellHtml(c, v) {
+  if (v == null) return `<td class="null ty-${c.type}"></td>`;
+  if (v instanceof Uint8Array) return `<td class="null">‹blob ${v.length.toLocaleString()} B›</td>`;
+  const s = c.type === 't' ? fmtT(v) : String(v);
+  return `<td class="ty-${c.type}">${esc(s.length > 600 ? s.slice(0, 600) + '…' : s)}</td>`;
+}
+function renderRows() {
+  const v = S.view; if (!v || !v.report) return;
+  const wrap = $('#gridwrap'), tb = wrap && wrap.querySelector('tbody'); if (!tb) return;
+  const r = v.report, idx = v.idx, n = idx.length, nc = r.cols.length;
+  const st = wrap.scrollTop, hh = wrap.clientHeight;
+  const a = Math.max(0, Math.floor(st / RH) - 15), b = Math.min(n, Math.ceil((st + hh) / RH) + 15);
+  let h = `<tr style="height:${a * RH}px"><td colspan="${nc}" style="padding:0;border:0;height:${a * RH}px"></td></tr>`;
+  for (let k = a; k < b; k++) {
+    const i = idx[k], row = r.rows[i];
+    h += `<tr class="r${i === v.sel ? ' on' : ''}" data-i="${i}">`;
+    for (let c = 0; c < nc; c++) h += cellHtml(r.cols[c], row[c]);
+    h += `</tr>`;
+  }
+  const rest = (n - b) * RH;
+  h += `<tr style="height:${rest}px"><td colspan="${nc}" style="padding:0;border:0;height:${rest}px"></td></tr>`;
+  if (!n) h = `<tr><td colspan="${nc}" style="color:var(--muted);padding:20px">No rows${v.filter || v.from != null || v.to != null ? ' match the filter' : ''}.</td></tr>`;
+  tb.innerHTML = h;
+}
+function updateCount() {
+  const v = S.view, el = $('#count'); if (!el || !v.report) return;
+  const t = v.report.rows.length, n = v.idx.length;
+  el.textContent = n === t ? `${t.toLocaleString()} rows` : `${n.toLocaleString()} of ${t.toLocaleString()} rows`;
+}
+function searchIndex(r) {
+  if (r._s && r._stz === S.tz) return r._s;
+  r._s = r.rows.map(row => row.map((x, i) => x == null ? '' : x instanceof Uint8Array ? '' : r.cols[i].type === 't' ? fmtT(x) : String(x)).join('\u0001').toLowerCase());
+  r._stz = S.tz;
+  return r._s;
+}
+function applyFilter() {
+  const v = S.view, r = v.report; if (!r) return;
+  const q = (v.filter || '').toLowerCase().trim();
+  const tc = r.cols.findIndex(c => c.type === 't');
+  const s = q ? searchIndex(r) : null, terms = q ? q.split(/\s+/) : [];
+  const idx = [];
+  for (let i = 0; i < r.rows.length; i++) {
+    if (s && !terms.every(t => s[i].includes(t))) continue;
+    if (tc >= 0 && (v.from != null || v.to != null)) {
+      const t = r.rows[i][tc];
+      if (t == null || (v.from != null && t < v.from) || (v.to != null && t > v.to)) continue;
+    }
+    idx.push(i);
+  }
+  if (v.sort) {
+    const { col, dir } = v.sort, rows = r.rows;
+    idx.sort((a, b) => {
+      let x = rows[a][col], y = rows[b][col];
+      if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1;
+      if (typeof x === 'number' && typeof y === 'number') return (x - y) * dir;
+      x = String(x); y = String(y); return (x < y ? -1 : x > y ? 1 : 0) * dir;
+    });
+  }
+  v.idx = idx;
+}
+function refreshGrid() { applyFilter(); renderRows(); updateCount(); }
+
+/* ---------- detail ---------- */
+function hexdump(u8, max = 512) {
+  let out = '';
+  for (let o = 0; o < Math.min(u8.length, max); o += 16) {
+    const s = [...u8.subarray(o, Math.min(o + 16, u8.length))];
+    out += o.toString(16).padStart(6, '0') + '  ' + s.map(b => b.toString(16).padStart(2, '0')).join(' ').padEnd(48) + '  ' + s.map(b => b > 31 && b < 127 ? String.fromCharCode(b) : '.').join('') + '\n';
+  }
+  if (u8.length > max) out += `… ${(u8.length - max).toLocaleString()} more bytes`;
+  return out;
+}
+function showDetail(i) {
+  const v = S.view, r = v.report, row = r.rows[i], d = $('#detail'); if (!d || !row) return;
+  v.sel = i;
+  let h = `<h3><span>Row details</span><button class="btn small" id="cpyrow">Copy JSON</button><button class="x" id="closed" title="Close">×</button></h3>`;
+  r.cols.forEach((c, k) => {
+    const x = row[k]; let val;
+    if (x == null) val = `<span class="muted">NULL</span>`;
+    else if (x instanceof Uint8Array) val = `<span class="muted">BLOB · ${x.length.toLocaleString()} bytes</span><pre class="hex">${esc(hexdump(x))}</pre>`;
+    else if (c.type === 't') val = `${esc(fmtT(x, 'utc'))} UTC<br><span class="muted">${esc(fmtT(x, 'local'))} local · ${esc(String(Math.round(x)))} unix ms</span>`;
+    else val = esc(String(x));
+    h += `<div class="kv"><div class="k">${esc(c.label)}</div><div class="v ty-${c.type}">${val}</div></div>`;
+  });
+  d.innerHTML = h; d.hidden = false;
+  document.querySelectorAll('#grid tr.r.on').forEach(e => e.classList.remove('on'));
+  const tr = document.querySelector(`#grid tr.r[data-i="${i}"]`); if (tr) tr.classList.add('on');
+}
+function rowJson(i) {
+  const r = S.view.report, row = r.rows[i], o = {};
+  r.cols.forEach((c, k) => { const x = row[k]; o[c.label] = x instanceof Uint8Array ? `<blob ${x.length} bytes>` : c.type === 't' && x != null ? fmtT(x, 'utc') + 'Z' : x; });
+  return JSON.stringify(o, null, 2);
+}
+
+/* ---------- CSV ---------- */
+function csvCell(x, c) {
+  if (x == null) return '';
+  let s = x instanceof Uint8Array ? `<blob ${x.length} bytes>` : c.type === 't' ? fmtT(x) : String(x);
+  if (/^[=+@\t\r]/.test(s) || (/^-/.test(s) && c.type !== 'n')) s = "'" + s;   // neutralise spreadsheet formula injection from evidence
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function toCsv() {
+  const v = S.view, r = v.report;
+  const head = r.cols.map(c => csvCell(c.type === 't' ? `${c.label} (${S.tz === 'utc' ? 'UTC' : 'local'})` : c.label, {})).join(',');
+  const lines = [head];
+  for (const i of v.idx) lines.push(r.cols.map((c, k) => csvCell(r.rows[i][k], c)).join(','));
+  return lines.join('\r\n');
+}
+const csvName = () => { const r = S.view.report; return `${(r.src + '_' + r.name).replace(/[^\w.-]+/g, '_').replace(/_+/g, '_')}.csv`; };
+async function copyText(t) {
+  try { await navigator.clipboard.writeText(t); return true; }
+  catch {
+    const ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch {} ta.remove(); return ok;
+  }
+}
+
+// Hosted as a claude.ai artifact: saves go through the viewer's download capability. Opened as a local file: a normal download link.
+let hostDownloads;
+const hostDl = () => hostDownloads ??= (window.claude && typeof window.claude.use === 'function'
+  ? Promise.resolve(window.claude.use('downloads')).catch(() => null) : Promise.resolve(null));
+async function downloadCsv() {
+  const csv = toCsv(), name = csvName();
+  const dl = await hostDl();
+  if (dl) {
+    try { await dl.save({ filename: name, data: csv }); toast(`Saved ${name}`); }
+    catch (e) { if (e && e.code === 'declined') return; toast('Download unavailable here — use Copy CSV', true); }
+    return;
+  }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+/* ---------- suite hand-offs (jon.glass only; see /assets/suite/handoff.js) ---------- */
+const suiteOk = () => !!(window.Suite && Suite.available());
+const isoZ = ms => { const d = new Date(ms); return isNaN(d.getTime()) ? '' : d.toISOString(); };
+function suiteCsv(cols, rows) {
+  const cell = s => { s = String(s ?? ''); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  return [cols.map(cell).join(','), ...rows.map(r => r.map(cell).join(','))].join('\n') + '\n';
+}
+const slugName = () => { const r = S.view.report; return `${r.src}_${r.name}`.replace(/[^\w.-]+/g, '_').replace(/_+/g, '_'); };
+async function sendToRecap() {
+  const v = S.view, r = v.report;
+  const rows = v.idx.map(i => r.rows[i].map((x, k) => x == null ? '' : x instanceof Uint8Array ? `<blob ${x.length} bytes>` : r.cols[k].type === 't' ? isoZ(x) : String(x)));
+  const tcols = r.cols.filter(c => c.type === 't').map(c => c.label);
+  try { location.href = await Suite.send('schema', 'recap', { kind: 'table', name: slugName(), data: suiteCsv(r.cols.map(c => c.label), rows), meta: { timeCols: tcols.slice(0, 1), tz: 0 } }); }
+  catch (e) { toast(e.message, true); }
+}
+async function sendToTessera() {
+  const v = S.view, r = v.report;
+  const tc = r.cols.findIndex(c => c.type === 't');
+  const ui = r.cols.findIndex(c => c.type === 'u');
+  const ti = r.cols.findIndex(c => /^(title|search term|typed text|target path|destination|value)$/i.test(c.label));
+  if (v.idx.length > 500 && !confirmBar(`Send ${v.idx.length.toLocaleString()} rows to Tessera as key events? Filter first to keep the case readable.`)) return;
+  const rows = v.idx.map(i => {
+    const row = r.rows[i], parts = [];
+    if (ti >= 0 && row[ti] != null && row[ti] !== '') parts.push(String(row[ti]));
+    if (ui >= 0 && row[ui]) parts.push(String(row[ui]));
+    if (!parts.length) parts.push(row.filter((x, k) => k !== tc && x != null && !(x instanceof Uint8Array)).slice(0, 3).join(' · '));
+    return [isoZ(row[tc]), `${r.name}: ${parts.join(' — ')}`, `${r.src} (Schema)`];
+  }).filter(x => x[0]);
+  try { location.href = await Suite.send('schema', 'tessera', { kind: 'events', name: slugName(), data: suiteCsv(['timestamp', 'event', 'source'], rows) }); }
+  catch (e) { toast(e.message, true); }
+}
+let confirmArmed = 0;
+function confirmBar(msg) { if (Date.now() - confirmArmed < 6000) { confirmArmed = 0; return true; } confirmArmed = Date.now(); toast(msg + ' Click again to send.'); return false; }
+async function bootParams() {
+  let params; try { params = new URLSearchParams(location.search); } catch { return; }
+  if (params.get('sample')) loadSample();
+  const from = params.get('from');
+  if (from && window.Suite) {
+    try {
+      const h = await Suite.receive('schema', from);
+      if (h) await handleBytes(h.name, h.bytes, ` (from ${h.fromName})`);
+    } catch (e) { toast('Could not load the hand-off: ' + e.message, true); }
+    try { history.replaceState(null, '', location.pathname); } catch {}
+  }
+}
+async function handleBytes(name, bytes, suffix = '') {
+  showLoading(true);
+  try {
+    await sqlReady;
+    if (!isSqlite(bytes)) { toast(`${name} is not a SQLite database`, true); return; }
+    const src = await addSource(name, bytes, null, null, { label: name + suffix });
+    afterLoad(src);
+  } finally { showLoading(false); }
+}
+
+/* ---------- UI plumbing ---------- */
+let toastT;
+function toast(msg, bad) { const t = $('#toast'); t.textContent = msg; t.className = 'show' + (bad ? ' bad' : ''); clearTimeout(toastT); toastT = setTimeout(() => t.className = '', bad ? 5200 : 2600); }
+function showLoading(on) { $('#loading').classList.toggle('show', on); }
+const parseLocalInput = v => !v ? null : (S.tz === 'utc' ? Date.parse(v + 'Z') : Date.parse(v));
+
+document.addEventListener('change', e => {
+  if (e.target.id === 'fi' || e.target.id === 'fi2') { handleFiles(e.target.files); e.target.value = ''; }
+  if (e.target.id === 'from' || e.target.id === 'to') { S.view[e.target.id] = parseLocalInput(e.target.value); refreshGrid(); }
+  if (e.target.id === 'autodec') { const f = fileById(S.view.fileId); f.autoDec = e.target.checked; }
+});
+let qT;
+document.addEventListener('input', e => {
+  if (e.target.id === 'q') { clearTimeout(qT); const val = e.target.value; qT = setTimeout(() => { S.view.filter = val; refreshGrid(); $('#gridwrap').scrollTop = 0; }, 140); }
+  if (e.target.id === 'sqlta') { const f = fileById(S.view.fileId); f.sqlText = e.target.value; }
+});
+document.addEventListener('click', async e => {
+  const t = e.target;
+  const tz = t.closest('[data-tz]');
+  if (tz) {
+    S.tz = tz.dataset.tz; document.querySelectorAll('#tz button').forEach(b => b.classList.toggle('on', b.dataset.tz === S.tz));
+    if (S.view) { S.view.from = S.view.to = null; if (S.view.report) { const sc = $('#gridwrap')?.scrollTop || 0; renderMain(); applyFilter(); renderRows(); updateCount(); if ($('#gridwrap')) $('#gridwrap').scrollTop = sc; } }
+    return;
+  }
+  if (t.id === 'sample') { loadSample(); return; }
+  const rm = t.closest('[data-rm]');
+  if (rm) { removeFile(rm.dataset.rm); return; }
+  const it = t.closest('[data-r]');
+  if (it) { openReport(S.reports.get(it.dataset.r)); return; }
+  const tb = t.closest('[data-tbl]');
+  if (tb) { const f = fileById(tb.dataset.tbl); f.openTables = true; showLoading(true); setTimeout(() => { try { openReport(tableReport(f, tb.dataset.t)); } catch (err) { toast(err.message, true); } finally { showLoading(false); } }, 10); return; }
+  const sq = t.closest('[data-sql]');
+  if (sq) { openSql(fileById(sq.dataset.sql)); return; }
+  if (t.id === 'run') { runConsole(); return; }
+  const pr = t.closest('[data-preset]');
+  if (pr) { const f = fileById(S.view.fileId); const list = [...(PRESETS[f.browser] || []), ...COMMON_PRESETS]; f.sqlText = list[+pr.dataset.preset][1]; $('#sqlta').value = f.sqlText; runConsole(); return; }
+  if (t.classList.contains('rz')) return;
+  const th = t.closest('#grid th');
+  if (th) {
+    const c = +th.dataset.c, v = S.view;
+    v.sort = !v.sort || v.sort.col !== c ? { col: c, dir: 1 } : v.sort.dir === 1 ? { col: c, dir: -1 } : null;
+    applyFilter();
+    const wrap = $('#gridwrap'); wrap.innerHTML = gridShell(v.report); renderRows(); updateCount();
+    return;
+  }
+  const tr = t.closest('#grid tr.r');
+  if (tr) { showDetail(+tr.dataset.i); return; }
+  if (t.id === 'closed') { $('#detail').hidden = true; S.view.sel = -1; document.querySelectorAll('#grid tr.r.on').forEach(e => e.classList.remove('on')); return; }
+  if (t.id === 'cpyrow') { toast((await copyText(rowJson(S.view.sel))) ? 'Row copied as JSON' : 'Copy failed', false); return; }
+  if (t.id === 'copy') { const n = S.view.idx.length; toast((await copyText(toCsv())) ? `Copied ${n.toLocaleString()} rows as CSV` : 'Clipboard blocked here — use Download CSV', false); return; }
+  if (t.id === 'dl') { downloadCsv(); return; }
+  if (t.id === 'toRecap') { sendToRecap(); return; }
+  if (t.id === 'toTessera') { sendToTessera(); return; }
+});
+document.addEventListener('toggle', e => { const d = e.target; if (d.dataset && d.dataset.tbls) { const f = fileById(d.dataset.tbls); if (f) f.openTables = d.open; } }, true);
+document.addEventListener('keydown', e => {
+  if (e.target.id === 'sqlta' && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); runConsole(); return; }
+  if (/INPUT|TEXTAREA/.test(e.target.tagName)) return;
+  const v = S.view; if (!v || !v.report || !v.idx.length) return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'j' || e.key === 'k') {
+    e.preventDefault();
+    let k = v.idx.indexOf(v.sel); k = (e.key === 'ArrowDown' || e.key === 'j') ? Math.min(v.idx.length - 1, k + 1) : Math.max(0, k - 1);
+    const i = v.idx[k]; v.sel = i;
+    const wrap = $('#gridwrap'), y = k * RH + 32;
+    if (y < wrap.scrollTop + 32) wrap.scrollTop = y - 32; else if (y + RH > wrap.scrollTop + wrap.clientHeight) wrap.scrollTop = y + RH - wrap.clientHeight;
+    renderRows(); showDetail(i);
+  }
+  if (e.key === 'Escape') { const d = $('#detail'); if (d) d.hidden = true; }
+});
+// column resize
+document.addEventListener('mousedown', e => {
+  const rz = e.target.closest('.rz'); if (!rz) return;
+  e.preventDefault(); e.stopPropagation();
+  const i = +rz.dataset.rz, c = S.view.report.cols[i], x0 = e.clientX, w0 = colWidth(c);
+  const col = document.querySelector(`#grid col[data-col="${i}"]`), table = $('#grid');
+  const move = ev => { c.w = Math.max(50, w0 + ev.clientX - x0); col.style.width = c.w + 'px'; table.style.width = S.view.report.cols.reduce((s, cc) => s + colWidth(cc), 0) + 'px'; };
+  const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
+  document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+});
+// drag & drop
+let dragN = 0;
+window.addEventListener('dragenter', e => { if ([...(e.dataTransfer?.types || [])].includes('Files')) { e.preventDefault(); dragN++; document.body.classList.add('dragging'); } });
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('dragleave', () => { if (--dragN <= 0) { dragN = 0; document.body.classList.remove('dragging'); } });
+window.addEventListener('drop', e => { e.preventDefault(); dragN = 0; document.body.classList.remove('dragging'); if (e.dataTransfer?.files?.length) handleFiles(e.dataTransfer.files); });
+
+function runConsole() {
+  const v = S.view, f = fileById(v.fileId);
+  f.sqlText = $('#sqlta').value; f.sqlErr = '';
+  try {
+    let last = null;
+    for (const stmt of f.db.iterateStatements(f.sqlText)) {
+      const names = stmt.getColumnNames(), rows = [];
+      while (stmt.step()) rows.push(stmt.get());
+      if (names.length) last = { cols: names.map(n => ({ label: n, type: '' })), rows };
+    }
+    if (!last) { f.sqlErr = 'Statement ran — no result set returned.'; f.sqlReport = null; }
+    else {
+      const d = f.autoDec !== false ? autoDecode(last.cols, last.rows) : last;
+      if (f.sqlReport) S.reports.delete(f.sqlReport.id);
+      f.sqlReport = mkReport('Query result', d.cols, d.rows, f);
+    }
+  } catch (err) { f.sqlErr = err.message; }
+  S.view = { sql: true, fileId: f.id, report: f.sqlReport, idx: null, sort: null, sel: -1, filter: '', from: null, to: null };
+  if (f.sqlReport) applyFilter();
+  renderMain();
+}
+function removeFile(id) {
+  const f = fileById(id); if (!f) return;
+  try { f.db.close(); } catch {}
+  for (const [k, r] of S.reports) if (r.fileId === id) S.reports.delete(k);
+  S.files = S.files.filter(x => x !== f);
+  buildCombined();
+  if (!S.view || S.view.fileId === id || (S.view.report && !S.reports.has(S.view.report.id))) {
+    const nf = S.files[0];
+    S.view = null;
+    if (nf) openReport(S.combined[0] && S.files.length > 1 ? S.combined[0] : (nf.reports[0] || nf.info));
+  }
+  renderSide(); if (!S.view) renderMain();
+}
+
+/* ---------- sample data (fictional scenario, built in-browser) ---------- */
+async function loadSample() {
+  showLoading(true);
+  try {
+    await sqlReady;
+    const lit = v => v == null ? 'NULL' : (typeof v === 'number' || typeof v === 'bigint') ? String(v) : `'${String(v).replace(/'/g, "''")}'`;
+    const ins = (db, t, rows) => rows.forEach(r => db.run(`INSERT INTO ${t} VALUES (${r.map(lit).join(',')})`));
+    const T0 = Date.UTC(2026, 10, 3, 13, 58, 0);
+    const wk = ms => (BigInt(Math.round(ms)) + 11644473600000n) * 1000n;
+    const pr = ms => BigInt(Math.round(ms)) * 1000n;
+    let seed = 7; const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+
+    // --- Chromium History ---
+    const c = new SQL.Database();
+    c.run(`CREATE TABLE meta(key LONGVARCHAR NOT NULL UNIQUE PRIMARY KEY, value LONGVARCHAR);
+      CREATE TABLE urls(id INTEGER PRIMARY KEY AUTOINCREMENT, url LONGVARCHAR, title LONGVARCHAR, visit_count INTEGER DEFAULT 0 NOT NULL, typed_count INTEGER DEFAULT 0 NOT NULL, last_visit_time INTEGER NOT NULL, hidden INTEGER DEFAULT 0 NOT NULL);
+      CREATE TABLE visits(id INTEGER PRIMARY KEY AUTOINCREMENT, url INTEGER NOT NULL, visit_time INTEGER NOT NULL, from_visit INTEGER, transition INTEGER DEFAULT 0 NOT NULL, segment_id INTEGER, visit_duration INTEGER DEFAULT 0 NOT NULL);
+      CREATE TABLE keyword_search_terms(keyword_id INTEGER NOT NULL, url_id INTEGER NOT NULL, term LONGVARCHAR NOT NULL, normalized_term LONGVARCHAR NOT NULL);
+      CREATE TABLE downloads(id INTEGER PRIMARY KEY, guid VARCHAR NOT NULL, current_path LONGVARCHAR NOT NULL, target_path LONGVARCHAR NOT NULL, start_time INTEGER NOT NULL, received_bytes INTEGER NOT NULL, total_bytes INTEGER NOT NULL, state INTEGER NOT NULL, danger_type INTEGER NOT NULL, interrupt_reason INTEGER NOT NULL, end_time INTEGER NOT NULL, opened INTEGER NOT NULL, last_access_time INTEGER NOT NULL, referrer VARCHAR NOT NULL, tab_url VARCHAR NOT NULL, mime_type VARCHAR(255) NOT NULL);
+      CREATE TABLE downloads_url_chains(id INTEGER NOT NULL, chain_index INTEGER NOT NULL, url LONGVARCHAR NOT NULL, PRIMARY KEY (id, chain_index));
+      INSERT INTO meta VALUES('version','69');`);
+    const TYPED = 0x32000001 | 0, LINK = 0x30000000 | 0, START = 0x10000000 | 0, SRVEND = (0xA0000000 | 0), FORM = 0x30000007 | 0, GEN = 0x32000005 | 0, CLIENT = (0x60000000 | 0), SUB = 0x30000003 | 0;
+    const urls = new Map(), visits = [];
+    const visit = (sec, url, title, tr, dur = 0, typed = false) => {
+      let u = urls.get(url); if (!u) urls.set(url, u = { id: urls.size + 1, url, title, n: 0, typed: 0, last: 0 });
+      u.n++; if (typed) u.typed++; const ms = T0 + sec * 1000 + Math.floor(rnd() * 900); u.last = Math.max(u.last, ms); if (title) u.title = title;
+      const id = visits.length + 1; const core = tr & 0xff; const from = (core === 1 || core === 5) ? 0 : id - 1;
+      visits.push([id, u.id, wk(ms), from, tr, null, Math.round(dur * 1e6)]);
+      return { id, ms, uid: u.id };
+    };
+    for (let k = 0; k < 40; k++) {
+      const sec = -86400 * 2 + Math.floor(rnd() * 86400 * 1.9);
+      const pick = Math.floor(rnd() * 5);
+      if (pick === 0) visit(sec, 'https://news.example.com/', 'Example News — Front page', TYPED, 40 + rnd() * 200, true);
+      else if (pick === 1) visit(sec, `https://news.example.com/article/${1000 + Math.floor(rnd() * 90)}`, 'Example News — Article', LINK, 60 + rnd() * 300);
+      else if (pick === 2) visit(sec, 'https://github.com/', 'GitHub', TYPED, 120, true);
+      else if (pick === 3) visit(sec, 'https://mail.example-corp.com/inbox', 'Inbox - Example Corp Mail', TYPED, 300, true);
+      else visit(sec, 'https://wiki.example-corp.com/team/oncall', 'On-call rota · Example Corp Wiki', LINK, 90);
+    }
+    visits.sort((a, b) => (a[2] < b[2] ? -1 : 1)); visits.forEach((v, i) => { v[0] = i + 1; v[3] = 0; });
+    visit(0, 'https://mail.example-corp.com/inbox', 'Inbox (3) - Example Corp Mail', TYPED, 140, true);
+    visit(150, 'https://mail.example-corp.com/inbox/msg/48213', 'RE: Overdue invoice #88213 - Example Corp Mail', LINK, 85);
+    visit(240, 'https://docs-share.example.net/view?id=88213', '', START);
+    visit(241, 'https://login-verify.example.net/auth?doc=88213', 'Sign in to view shared document', SRVEND, 58);
+    visit(300, 'https://login-verify.example.net/auth/submit', 'Verifying…', FORM, 2);
+    visit(302, 'https://cdn.files-dl.example.net/d/invoice_88213.zip', '', CLIENT, 0);
+    const g1 = visit(720, 'https://www.google.com/search?q=invoice+zip+wont+open', 'invoice zip wont open - Google Search', GEN, 25);
+    visit(760, 'https://answers.example.org/q/zip-file-wont-open', "Zip file won't open after download? · Answers", LINK, 200);
+    const g2 = visit(1320, 'https://www.google.com/search?q=how+to+clear+browser+history+chrome', 'how to clear browser history chrome - Google Search', GEN, 18);
+    visit(1338, 'https://support.example.org/chrome/clear-history', 'Delete your browsing history · Example Support', LINK, 30);
+    visit(1380, 'chrome://settings/clearBrowserData', 'Settings - Clear browsing data', TYPED, 45, true);
+    ins(c, 'urls', [...urls.values()].map(u => [u.id, u.url, u.title, u.n, u.typed, wk(u.last), 0]));
+    ins(c, 'visits', visits);
+    ins(c, 'keyword_search_terms', [[2, g1.uid, 'invoice zip wont open', 'invoice zip wont open'], [2, g2.uid, 'how to clear browser history chrome', 'how to clear browser history chrome']]);
+    const dlS = T0 + 303000, dlE = T0 + 309400;
+    ins(c, 'downloads', [[1, '6f1c3a2e-0d55-4b7e-9d0a-2c8f6a1b9e11', 'C:\\Users\\jdoe\\Downloads\\invoice_88213.zip', 'C:\\Users\\jdoe\\Downloads\\invoice_88213.zip', wk(dlS), 412883, 412883, 1, 5, 0, wk(dlE), 1, wk(T0 + 331000),
+      'https://login-verify.example.net/auth/submit', 'https://login-verify.example.net/auth/submit', 'application/zip']]);
+    ins(c, 'downloads_url_chains', [[1, 0, 'https://login-verify.example.net/dl?f=88213'], [1, 1, 'https://cdn.files-dl.example.net/d/invoice_88213.zip']]);
+
+    // --- Firefox places.sqlite ---
+    const fx = new SQL.Database();
+    fx.run(`CREATE TABLE moz_places(id INTEGER PRIMARY KEY, url LONGVARCHAR, title LONGVARCHAR, rev_host LONGVARCHAR, visit_count INTEGER DEFAULT 0, hidden INTEGER DEFAULT 0 NOT NULL, typed INTEGER DEFAULT 0 NOT NULL, frecency INTEGER DEFAULT -1 NOT NULL, last_visit_date INTEGER, guid TEXT, description TEXT);
+      CREATE TABLE moz_historyvisits(id INTEGER PRIMARY KEY, from_visit INTEGER, place_id INTEGER, visit_date INTEGER, visit_type INTEGER, session INTEGER, source INTEGER DEFAULT 0 NOT NULL);
+      CREATE TABLE moz_inputhistory(place_id INTEGER NOT NULL, input LONGVARCHAR NOT NULL, use_count INTEGER, PRIMARY KEY (place_id, input));
+      CREATE TABLE moz_bookmarks(id INTEGER PRIMARY KEY, type INTEGER, fk INTEGER DEFAULT NULL, parent INTEGER, position INTEGER, title LONGVARCHAR, dateAdded INTEGER, lastModified INTEGER, guid TEXT);
+      CREATE TABLE moz_anno_attributes(id INTEGER PRIMARY KEY, name VARCHAR(32) UNIQUE NOT NULL);
+      CREATE TABLE moz_annos(id INTEGER PRIMARY KEY, place_id INTEGER NOT NULL, anno_attribute_id INTEGER, content LONGVARCHAR, flags INTEGER DEFAULT 0, expiration INTEGER DEFAULT 0, type INTEGER DEFAULT 0, dateAdded INTEGER DEFAULT 0, lastModified INTEGER DEFAULT 0);`);
+    const P = [], V = [];
+    const fvisit = (sec, url, title, type, typed = 0) => {
+      let p = P.find(x => x[1] === url); const ms = T0 + sec * 1000 + Math.floor(rnd() * 900);
+      if (!p) { p = [P.length + 1, url, title, '', 0, 0, typed, 100, null, 'g' + (P.length + 1), null]; P.push(p); }
+      p[4]++; p[8] = pr(ms); if (typed) p[6] = 1;
+      V.push([V.length + 1, V.length ? V.length : 0, p[0], pr(ms), type, 0, 0]);
+      return { pid: p[0], ms };
+    };
+    fvisit(2700, 'https://duckduckgo.com/?q=is+my+computer+hacked', 'is my computer hacked at DuckDuckGo', 2, 1);
+    fvisit(2760, 'https://support.example.org/malware-check', 'Free Malware Check – Example Support', 1);
+    const h1 = fvisit(2900, 'https://helpdesk-tools.example.com/download', 'Remote Help – Download', 1);
+    const d1 = fvisit(2905, 'https://helpdesk-tools.example.com/files/RemoteHelper.exe', 'RemoteHelper.exe', 7);
+    fvisit(3600, 'https://helpdesk-tools.example.com/session/join?code=482-119', 'Remote Help – Session 482-119', 2, 1);
+    ins(fx, 'moz_places', P); ins(fx, 'moz_historyvisits', V);
+    ins(fx, 'moz_inputhistory', [[1, 'is my comp', 1]]);
+    ins(fx, 'moz_bookmarks', [[1, 2, null, 0, 0, '', pr(T0 - 9e8), pr(T0 - 9e8), 'root________'], [3, 2, null, 1, 1, 'toolbar', pr(T0 - 9e8), pr(T0 + 2950000), 'toolbar_____'],
+      [10, 1, h1.pid, 3, 0, 'Remote Help', pr(T0 + 2950000), pr(T0 + 2950000), 'bkmk00000010']]);
+    ins(fx, 'moz_anno_attributes', [[1, 'downloads/destinationFileURI'], [2, 'downloads/metaData']]);
+    ins(fx, 'moz_annos', [[1, d1.pid, 1, 'file:///C:/Users/jdoe/Downloads/RemoteHelper.exe', 0, 4, 3, pr(d1.ms), pr(d1.ms)],
+      [2, d1.pid, 2, JSON.stringify({ state: 1, deleted: false, endTime: d1.ms + 4200, fileSize: 2873344 }), 0, 4, 3, pr(d1.ms + 4200), pr(d1.ms + 4200)]]);
+
+    const a = await addSource('History', c.export(), null, null, { label: 'History (sample)', sample: true });
+    const b = await addSource('places.sqlite', fx.export(), null, null, { label: 'places.sqlite (sample)', sample: true });
+    c.close(); fx.close();
+    afterLoad(a || b);
+    toast('Loaded a fictional two-browser scenario — start with the Combined Timeline');
+  } catch (e) { console.error(e); toast('Sample failed: ' + e.message, true); }
+  finally { showLoading(false); }
+}
+
+/* ---------- boot ---------- */
+renderSide(); renderMain();
+bootParams();
+sqlReady.catch(e => toast('SQLite engine failed to load: ' + e.message, true));
+window.__schema = { S, handleFiles, applyWal, sqlReady, engine: () => ENGINE };
+</script>
+</body>
+</html>
