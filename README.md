@@ -1,12 +1,12 @@
-# Schema
+# Historian
 
-Read any SQLite database, starting with browser history.
+Read browser history, and any other SQLite database.
 
-Drop in Chrome, Edge, Brave, Firefox or Safari databases and Schema recognizes them, converts every timestamp format to UTC and decodes visit types and download states. Drop several at once to get one combined timeline across browsers. Add the `-wal` file and it merges the committed transactions the database file hasn't caught up on yet. Anything else gets a table browser that recognizes timestamp columns, a hex view for blobs, and a SQL console.
+Drop in Chrome, Edge, Brave, Firefox or Safari databases and Historian recognizes them, converts every timestamp format to UTC and decodes visit types and download states. Drop several at once to get one combined timeline across browsers. Add the `-wal` file and it merges the committed transactions the database file hasn't caught up on yet. Anything else gets a table browser that recognizes timestamp columns, a hex view for blobs, and a SQL console.
 
 **Good for:** Browser history from a forensic image, recovering the last few minutes of activity from a WAL file, and poking at any app's SQLite store.
 
-**Live:** https://jon.glass/schema/
+**Live:** https://jon.glass/historian/
 
 | Browser | Files | Reports |
 |---|---|---|

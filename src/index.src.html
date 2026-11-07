@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Schema · Browser History &amp; SQLite Parser</title>
+<title>Historian · Browser History &amp; SQLite Parser</title>
 <meta name="description" content="Parse browser history and any SQLite database in your browser: Chrome, Edge, Firefox and Safari artifacts, decoded timestamps, WAL merge and a SQL console.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23141a24'/%3E%3Cg fill='none' stroke='%23f2a93b' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cellipse cx='16' cy='9.5' rx='8' ry='3'/%3E%3Cpath d='M8 9.5v13c0 1.66 3.58 3 8 3s8-1.34 8-3v-13'/%3E%3Cpath d='M8 16c0 1.66 3.58 3 8 3s8-1.34 8-3'/%3E%3C/g%3E%3C/svg%3E">
 <style>
@@ -132,7 +132,7 @@ body.dragging #dropov{display:flex}
   <header>
     <div class="logo">
       <svg width='28' height='28' aria-hidden='true' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='none'/><g fill='none' stroke='#f2a93b' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><ellipse cx='16' cy='9.5' rx='8' ry='3'/><path d='M8 9.5v13c0 1.66 3.58 3 8 3s8-1.34 8-3v-13'/><path d='M8 16c0 1.66 3.58 3 8 3s8-1.34 8-3'/></g></svg>
-      <b>Schema</b><span class="sub">browser history &amp; SQLite parser</span>
+      <b>Historian</b><span class="sub">browser history &amp; SQLite parser</span>
     </div>
     <div class="spacer"></div>
     <span class="local"><i></i>Runs locally — nothing is uploaded</span>
@@ -152,7 +152,7 @@ body.dragging #dropov{display:flex}
 <script>
 "use strict";
 /* ============================================================
-   Schema — client-side SQLite parser for browser artifacts
+   Historian — client-side SQLite parser for browser artifacts
    SQLite engine: sql.js (MIT) — https://github.com/sql-js/sql.js
    ============================================================ */
 const $ = s => document.querySelector(s);
@@ -685,7 +685,7 @@ function renderMain() {
 function emptyHtml() {
   return `<div class="empty"><div class="drop">
     <h1>Drop browser artifacts here</h1>
-    <p>Schema parses SQLite databases right in your browser using SQLite compiled to WebAssembly. Known browser artifacts are decoded automatically: timestamps, visit transitions and download states. Anything else gets a table browser and a SQL console.</p>
+    <p>Historian parses SQLite databases right in your browser using SQLite compiled to WebAssembly. Known browser artifacts are decoded automatically: timestamps, visit transitions and download states. Anything else gets a table browser and a SQL console.</p>
     <div class="acts"><label class="btn primary">Choose files…<input type="file" id="fi2" multiple hidden></label><button class="btn" id="sample">Try with sample data</button></div>
     <div class="sup">
       <div><b><span class="badge b-chromium">Chromium</span></b><code>History<br>Cookies · Login Data<br>Web Data · Shortcuts</code></div>
@@ -694,10 +694,10 @@ function emptyHtml() {
     </div>
     <div class="tips">
       Chrome, Edge, Brave, Opera and Vivaldi all share the Chromium format. Drop several files at once to get a combined, cross-browser timeline.<br>
-      Copy the <code>-wal</code> file alongside the database (e.g. <code>History</code> + <code>History-wal</code>). Schema merges committed, checksum-valid WAL frames into an in-memory copy.<br>
+      Copy the <code>-wal</code> file alongside the database (e.g. <code>History</code> + <code>History-wal</code>). Historian merges committed, checksum-valid WAL frames into an in-memory copy.<br>
       Browsers lock these files while running. Work from a copy or a forensic image, not the live profile.
     </div>
-    <p class="tips" style="margin-top:14px">&copy; 2026 <a href="https://jon.glass/" style="color:inherit">Jon Glass</a> &middot; <a href="https://github.com/glassdfir/schema/blob/main/LICENSE" style="color:inherit">MIT License</a> &middot; <a href="https://github.com/glassdfir/schema" style="color:inherit">Source</a> &middot; SQLite engine: <a href="https://github.com/sql-js/sql.js" style="color:inherit">sql.js</a> (MIT)</p></div></div>`;
+    <p class="tips" style="margin-top:14px">&copy; 2026 <a href="https://jon.glass/" style="color:inherit">Jon Glass</a> &middot; <a href="https://github.com/glassdfir/historian/blob/main/LICENSE" style="color:inherit">MIT License</a> &middot; <a href="https://github.com/glassdfir/historian" style="color:inherit">Source</a> &middot; SQLite engine: <a href="https://github.com/sql-js/sql.js" style="color:inherit">sql.js</a> (MIT)</p></div></div>`;
 }
 
 /* ---------- grid ---------- */
@@ -863,7 +863,7 @@ async function sendToRecap() {
   const v = S.view, r = v.report;
   const rows = v.idx.map(i => r.rows[i].map((x, k) => x == null ? '' : x instanceof Uint8Array ? `<blob ${x.length} bytes>` : r.cols[k].type === 't' ? isoZ(x) : String(x)));
   const tcols = r.cols.filter(c => c.type === 't').map(c => c.label);
-  try { location.href = await Suite.send('schema', 'recap', { kind: 'table', name: slugName(), data: suiteCsv(r.cols.map(c => c.label), rows), meta: { timeCols: tcols.slice(0, 1), tz: 0 } }); }
+  try { location.href = await Suite.send('historian', 'recap', { kind: 'table', name: slugName(), data: suiteCsv(r.cols.map(c => c.label), rows), meta: { timeCols: tcols.slice(0, 1), tz: 0 } }); }
   catch (e) { toast(e.message, true); }
 }
 async function sendToTessera() {
@@ -877,9 +877,9 @@ async function sendToTessera() {
     if (ti >= 0 && row[ti] != null && row[ti] !== '') parts.push(String(row[ti]));
     if (ui >= 0 && row[ui]) parts.push(String(row[ui]));
     if (!parts.length) parts.push(row.filter((x, k) => k !== tc && x != null && !(x instanceof Uint8Array)).slice(0, 3).join(' · '));
-    return [isoZ(row[tc]), `${r.name}: ${parts.join(' — ')}`, `${r.src} (Schema)`];
+    return [isoZ(row[tc]), `${r.name}: ${parts.join(' — ')}`, `${r.src} (Historian)`];
   }).filter(x => x[0]);
-  try { location.href = await Suite.send('schema', 'tessera', { kind: 'events', name: slugName(), data: suiteCsv(['timestamp', 'event', 'source'], rows) }); }
+  try { location.href = await Suite.send('historian', 'tessera', { kind: 'events', name: slugName(), data: suiteCsv(['timestamp', 'event', 'source'], rows) }); }
   catch (e) { toast(e.message, true); }
 }
 let confirmArmed = 0;
@@ -890,7 +890,7 @@ async function bootParams() {
   const from = params.get('from');
   if (from && window.Suite) {
     try {
-      const h = await Suite.receive('schema', from);
+      const h = await Suite.receive('historian', from);
       if (h) await handleBytes(h.name, h.bytes, ` (from ${h.fromName})`);
     } catch (e) { toast('Could not load the hand-off: ' + e.message, true); }
     try { history.replaceState(null, '', location.pathname); } catch {}
@@ -1128,7 +1128,7 @@ async function loadSample() {
 renderSide(); renderMain();
 bootParams();
 sqlReady.catch(e => toast('SQLite engine failed to load: ' + e.message, true));
-window.__schema = { S, handleFiles, applyWal, sqlReady, engine: () => ENGINE };
+window.__historian = { S, handleFiles, applyWal, sqlReady, engine: () => ENGINE };
 </script>
 </body>
 </html>
