@@ -663,6 +663,7 @@ function renderMain() {
   if (r) {
     h += `<input class="in" id="q" placeholder="Filter rows…  (all columns)" value="${esc(v.filter)}" autocomplete="off" spellcheck="false">`;
     if (hasT) h += `<div class="rng">From <input class="in" type="datetime-local" step="1" id="from"> to <input class="in" type="datetime-local" step="1" id="to"><span id="tzlbl">${S.tz === 'utc' ? 'UTC' : 'local'}</span></div>`;
+    if (suiteOk()) h += `<button class="btn small" id="toShifu" title="Open these rows in Shifu to filter, reshape and script them with pandas">Send to Shifu</button>`;
     if (suiteOk() && hasT) h += `<button class="btn small" id="toRecap" title="Open these rows as a timeline in Recap">Send to Recap</button><button class="btn small" id="toTessera" title="Add these rows to the case notebook as key events">Send to Tessera</button>`;
     h += `<button class="btn small" id="copy" title="Copy the filtered rows as CSV">Copy CSV</button><button class="btn small" id="dl" title="Download the filtered rows as CSV">Download CSV</button>`;
   }
@@ -859,11 +860,19 @@ function suiteCsv(cols, rows) {
   return [cols.map(cell).join(','), ...rows.map(r => r.map(cell).join(','))].join('\n') + '\n';
 }
 const slugName = () => { const r = S.view.report; return `${r.src}_${r.name}`.replace(/[^\w.-]+/g, '_').replace(/_+/g, '_'); };
-async function sendToRecap() {
+// The filtered, sorted rows as CSV, times as ISO 8601 UTC so the receiving tool parses them unambiguously
+function viewTableCsv() {
   const v = S.view, r = v.report;
   const rows = v.idx.map(i => r.rows[i].map((x, k) => x == null ? '' : x instanceof Uint8Array ? `<blob ${x.length} bytes>` : r.cols[k].type === 't' ? isoZ(x) : String(x)));
-  const tcols = r.cols.filter(c => c.type === 't').map(c => c.label);
-  try { location.href = await Suite.send('historian', 'recap', { kind: 'table', name: slugName(), data: suiteCsv(r.cols.map(c => c.label), rows), meta: { timeCols: tcols.slice(0, 1), tz: 0 } }); }
+  return suiteCsv(r.cols.map(c => c.label), rows);
+}
+async function sendToRecap() {
+  const tcols = S.view.report.cols.filter(c => c.type === 't').map(c => c.label);
+  try { location.href = await Suite.send('historian', 'recap', { kind: 'table', name: slugName(), data: viewTableCsv(), meta: { timeCols: tcols.slice(0, 1), tz: 0 } }); }
+  catch (e) { toast(e.message, true); }
+}
+async function sendToShifu() {
+  try { location.href = await Suite.send('historian', 'shifu', { kind: 'table', name: slugName(), data: viewTableCsv() }); }
   catch (e) { toast(e.message, true); }
 }
 async function sendToTessera() {
@@ -958,6 +967,7 @@ document.addEventListener('click', async e => {
   if (t.id === 'copy') { const n = S.view.idx.length; toast((await copyText(toCsv())) ? `Copied ${n.toLocaleString()} rows as CSV` : 'Clipboard blocked here — use Download CSV', false); return; }
   if (t.id === 'dl') { downloadCsv(); return; }
   if (t.id === 'toRecap') { sendToRecap(); return; }
+  if (t.id === 'toShifu') { sendToShifu(); return; }
   if (t.id === 'toTessera') { sendToTessera(); return; }
 });
 document.addEventListener('toggle', e => { const d = e.target; if (d.dataset && d.dataset.tbls) { const f = fileById(d.dataset.tbls); if (f) f.openTables = d.open; } }, true);

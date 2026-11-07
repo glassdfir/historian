@@ -14,7 +14,7 @@ Drop in Chrome, Edge, Brave, Firefox or Safari databases and Historian recognize
 | Firefox | `places.sqlite`, `cookies.sqlite`, `formhistory.sqlite` | Visits, Places, Downloads, Bookmarks, Typed Input, Form History, Cookies |
 | Safari | `History.db` | Visits (with redirects), History Items |
 
-A single self-contained page: SQLite is compiled to WebAssembly and embedded, so it works offline and nothing you load leaves the browser. Open `index.html` or serve the folder over HTTPS. Uses the shared suite script at `/assets/suite/handoff.js` from [jon.glass](https://jon.glass) to send rows to Recap and Tessera and to take SQLite files from Hexes, so cross-tool handoff only works when served from jon.glass.
+A single self-contained page: SQLite is compiled to WebAssembly and embedded, so it works offline and nothing you load leaves the browser. Open `index.html` or serve the folder over HTTPS. Uses the shared suite script at `/assets/suite/handoff.js` from [jon.glass](https://jon.glass) to send rows to Shifu, Recap and Tessera and to take SQLite files from Hexes, so cross-tool handoff only works when served from jon.glass.
 
 Cookie values and saved passwords are shown as encrypted blobs: decrypting them needs the OS keychain or DPAPI. Deleted records in freelist pages are not carved.
 
